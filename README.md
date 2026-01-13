@@ -1,1 +1,1 @@
-# Rezo---Haptic-Metronome
+# Rezo - Haptic Metronome
