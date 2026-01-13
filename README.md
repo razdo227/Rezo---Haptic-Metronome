@@ -1,1 +1,1 @@
-# Rezo - Haptic Metronome
+# Rezo - An Experimental Haptic Metronome Interface
