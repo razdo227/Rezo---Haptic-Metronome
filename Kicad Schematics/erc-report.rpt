@@ -1,0 +1,98 @@
+ERC report (2026-03-04T00:08:46+0000, Encoding UTF8)
+
+***** Sheet /
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(63.50 mm, 38.10 mm): Symbol #PWR03 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(63.50 mm, 41.91 mm): Symbol C4 [C]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(66.04 mm, 57.15 mm): Symbol #PWR04 [GND]
+[footprint_link_issues]: The current configuration does not include the footprint library 'Library'.
+    ; warning
+    @(83.82 mm, 59.69 mm): Symbol U3 [DRV2605LDGSR]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'DRV2605LDGSR'
+    ; warning
+    @(83.82 mm, 59.69 mm): Symbol U3 [DRV2605LDGSR]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(77.47 mm, 83.82 mm): Symbol R1 [R]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(91.44 mm, 83.82 mm): Symbol R2 [R]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(106.68 mm, 63.50 mm): Symbol C3 [C]
+[footprint_link_issues]: Footprint 'BOURNS_70AAJ-2-M0' not found in library 'Connector'.
+    ; warning
+    @(118.11 mm, 54.61 mm): Symbol J3 [Conn_01x02_Socket]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Connector'
+    ; warning
+    @(118.11 mm, 54.61 mm): Symbol J3 [Conn_01x02_Socket]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(115.57 mm, 69.85 mm): Symbol #PWR06 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(66.04 mm, 123.19 mm): Symbol #PWR05 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(66.04 mm, 127.00 mm): Symbol C2 [C]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(68.58 mm, 142.24 mm): Symbol #PWR02 [GND]
+[footprint_link_issues]: The current configuration does not include the footprint library 'Library'.
+    ; warning
+    @(86.36 mm, 144.78 mm): Symbol U2 [DRV2605LDGSR]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'DRV2605LDGSR'
+    ; warning
+    @(86.36 mm, 144.78 mm): Symbol U2 [DRV2605LDGSR]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(109.22 mm, 148.59 mm): Symbol C1 [C]
+[footprint_link_issues]: Footprint 'BOURNS_70AAJ-2-M0' not found in library 'Connector'.
+    ; warning
+    @(120.65 mm, 139.70 mm): Symbol J2 [Conn_01x02_Socket]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Connector'
+    ; warning
+    @(120.65 mm, 139.70 mm): Symbol J2 [Conn_01x02_Socket]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(80.01 mm, 170.18 mm): Symbol R3 [R]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Device'
+    ; warning
+    @(93.98 mm, 170.18 mm): Symbol R4 [R]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(118.11 mm, 154.94 mm): Symbol #PWR01 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(214.63 mm, 71.12 mm): Symbol #PWR07 [GND]
+[footprint_link_issues]: The current configuration does not include the footprint library 'Library'.
+    ; warning
+    @(208.28 mm, 97.79 mm): Symbol U1 [XIAO-nRF52840-SMD]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'XIAO-ESP32-C3-DIP'
+    ; warning
+    @(208.28 mm, 97.79 mm): Symbol U1 [XIAO-nRF52840-SMD]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Switch'
+    ; warning
+    @(191.77 mm, 128.27 mm): Symbol SW2 [SW_Push]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(205.74 mm, 128.27 mm): Symbol #FLG02 [PWR_FLAG]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(205.74 mm, 130.81 mm): Symbol #PWR014 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(228.60 mm, 93.98 mm): Symbol #FLG01 [PWR_FLAG]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'power'
+    ; warning
+    @(231.14 mm, 90.17 mm): Symbol #PWR08 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Connector'
+    ; warning
+    @(219.71 mm, 133.35 mm): Symbol J1 [Conn_01x02_Socket]
+
+ ** ERC messages: 31  Errors 0  Warnings 31
