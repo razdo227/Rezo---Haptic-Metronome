@@ -1,51 +1,81 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { bpmFromTapPoints, pushTap, type TapPoint } from '../src/lib/tempo';
+import { MockTransportService } from '../src/services/transportService';
+import { MidiClockTracker } from '../src/lib/midiClock';
 
-type TapSample = { at: number };
+const transport = new MockTransportService();
 
 export default function HomeScreen() {
   const [bpm, setBpm] = useState(120);
   const [isRunning, setIsRunning] = useState(false);
-  const [samples, setSamples] = useState<TapSample[]>([]);
+  const [samples, setSamples] = useState<TapPoint[]>([]);
   const [mode, setMode] = useState<'manual' | 'mic'>('manual');
+  const [isConnected, setIsConnected] = useState(false);
+  const [midiBpm, setMidiBpm] = useState<number | null>(null);
 
-  const derivedBpm = useMemo(() => {
-    if (samples.length < 4) return null;
-    const intervals: number[] = [];
-    for (let i = 1; i < samples.length; i++) intervals.push(samples[i].at - samples[i - 1].at);
-    const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    return Math.max(20, Math.min(300, Math.round(60000 / avgMs)));
-  }, [samples]);
+  const derivedBpm = useMemo(() => bpmFromTapPoints(samples), [samples]);
+
+  useEffect(() => {
+    transport.connect().then(() => setIsConnected(true));
+    return () => {
+      transport.disconnect();
+    };
+  }, []);
+
+  // placeholder MIDI clock estimator sample hook
+  useEffect(() => {
+    const tracker = new MidiClockTracker();
+    let t = Date.now();
+    // fake incoming MIDI clock pulses for UI/dev validation
+    const id = setInterval(() => {
+      tracker.onClock(t);
+      t += 20.833; // ~120 BPM
+      const val = tracker.getBpm();
+      if (val) setMidiBpm(val);
+    }, 21);
+    return () => clearInterval(id);
+  }, []);
 
   const onTapTempo = () => {
     const now = Date.now();
-    setSamples(prev => {
-      const fresh = prev.filter(x => now - x.at < 6000);
-      return [...fresh, { at: now }].slice(-8);
-    });
+    setSamples((prev) => pushTap(prev, now));
   };
 
-  const applyDerivedTempo = () => {
-    if (derivedBpm) setBpm(derivedBpm);
+  const applyDerivedTempo = async () => {
+    if (derivedBpm) {
+      setBpm(derivedBpm);
+      await transport.setTempo(derivedBpm);
+    }
+  };
+
+  const toggleTransport = async () => {
+    const next = !isRunning;
+    setIsRunning(next);
+    await transport.setTransport(next ? 'running' : 'stopped');
+  };
+
+  const onTempoInput = async (v: string) => {
+    const next = Math.max(20, Math.min(300, Number(v) || 120));
+    setBpm(next);
+    await transport.setTempo(next);
   };
 
   return (
     <SafeAreaView style={s.root}>
       <View style={s.container}>
         <Text style={s.title}>Rezo Haptic</Text>
-        <Text style={s.subtitle}>Minimal control surface (v0.1)</Text>
+        <Text style={s.subtitle}>Cross-platform control app (v0.1)</Text>
 
         <View style={s.card}>
+          <Text style={s.label}>Device</Text>
+          <Text style={s.meta}>{isConnected ? 'Connected (mock transport)' : 'Connecting…'}</Text>
+
           <Text style={s.label}>Tempo (BPM)</Text>
-          <TextInput
-            value={String(bpm)}
-            onChangeText={(v) => setBpm(Math.max(20, Math.min(300, Number(v) || 120)))}
-            keyboardType="number-pad"
-            style={s.input}
-          />
+          <TextInput value={String(bpm)} onChangeText={onTempoInput} keyboardType="number-pad" style={s.input} />
 
           <View style={s.row}>
-            <Pressable style={[s.btn, isRunning && s.btnActive]} onPress={() => setIsRunning(v => !v)}>
+            <Pressable style={[s.btn, isRunning && s.btnActive]} onPress={toggleTransport}>
               <Text style={s.btnText}>{isRunning ? 'Stop' : 'Start'}</Text>
             </Pressable>
             <Pressable style={s.btnGhost} onPress={onTapTempo}>
@@ -63,12 +93,13 @@ export default function HomeScreen() {
           </View>
 
           <Text style={s.meta}>Detected Tap BPM: {derivedBpm ?? '—'}</Text>
+          <Text style={s.meta}>MIDI Clock BPM: {midiBpm ?? '—'}</Text>
           <Pressable style={s.btnGhost} onPress={applyDerivedTempo}>
             <Text style={s.btnGhostText}>Use Detected BPM</Text>
           </Pressable>
         </View>
 
-        <Text style={s.foot}>Next: BLE transport + MIDI clock sync + mic onset detector</Text>
+        <Text style={s.foot}>Next: wire BLE transport + real MIDI source + mic onset capture</Text>
       </View>
     </SafeAreaView>
   );
