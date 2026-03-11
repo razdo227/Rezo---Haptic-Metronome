@@ -3,6 +3,7 @@ import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'reac
 import { bpmFromTapPoints, pushTap, type TapPoint } from '../src/lib/tempo';
 import { MockTransportService } from '../src/services/transportService';
 import { MidiClockTracker } from '../src/lib/midiClock';
+import { applyMidiEvent, defaultSyncRuntime, shouldTimeoutBeatTrigger, type SyncMode } from '../src/lib/syncMode';
 
 const transport = new MockTransportService();
 
@@ -13,6 +14,8 @@ export default function HomeScreen() {
   const [mode, setMode] = useState<'manual' | 'mic'>('manual');
   const [isConnected, setIsConnected] = useState(false);
   const [midiBpm, setMidiBpm] = useState<number | null>(null);
+  const [syncMode, setSyncMode] = useState<SyncMode>('INTERNAL');
+  const [syncState, setSyncState] = useState(defaultSyncRuntime());
 
   const derivedBpm = useMemo(() => bpmFromTapPoints(samples), [samples]);
 
@@ -23,17 +26,39 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // placeholder MIDI clock estimator sample hook
+  // placeholder MIDI path for UI/dev validation
   useEffect(() => {
     const tracker = new MidiClockTracker();
     let t = Date.now();
-    // fake incoming MIDI clock pulses for UI/dev validation
-    const id = setInterval(() => {
+
+    const pulse = setInterval(() => {
       tracker.onClock(t);
-      t += 20.833; // ~120 BPM
+      t += 20.833; // ~120 BPM clock pulses
       const val = tracker.getBpm();
       if (val) setMidiBpm(val);
     }, 21);
+
+    const beat = setInterval(() => {
+      if (syncMode === 'MIDI_BEAT_TRIGGER') {
+        setSyncState((prev) => applyMidiEvent({ ...prev, mode: syncMode }, { type: 'beat' }, Date.now()));
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(pulse);
+      clearInterval(beat);
+    };
+  }, [syncMode]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSyncState((prev) => {
+        if (shouldTimeoutBeatTrigger(prev, Date.now())) {
+          return { ...prev, running: false };
+        }
+        return prev;
+      });
+    }, 250);
     return () => clearInterval(id);
   }, []);
 
@@ -52,6 +77,7 @@ export default function HomeScreen() {
   const toggleTransport = async () => {
     const next = !isRunning;
     setIsRunning(next);
+    setSyncState((prev) => ({ ...prev, running: next }));
     await transport.setTransport(next ? 'running' : 'stopped');
   };
 
@@ -61,15 +87,30 @@ export default function HomeScreen() {
     await transport.setTempo(next);
   };
 
+  const onSyncModeChange = async (next: SyncMode) => {
+    setSyncMode(next);
+    setSyncState((prev) => ({ ...prev, mode: next }));
+    await transport.setSyncMode(next);
+  };
+
   return (
     <SafeAreaView style={s.root}>
       <View style={s.container}>
         <Text style={s.title}>Rezo Haptic</Text>
-        <Text style={s.subtitle}>Cross-platform control app (v0.1)</Text>
+        <Text style={s.subtitle}>nRF clock-master + MIDI beat-trigger ready</Text>
 
         <View style={s.card}>
           <Text style={s.label}>Device</Text>
           <Text style={s.meta}>{isConnected ? 'Connected (mock transport)' : 'Connecting…'}</Text>
+
+          <Text style={s.label}>Sync Mode</Text>
+          <View style={s.rowWrap}>
+            {(['INTERNAL', 'MIDI_CLOCK_FOLLOW', 'MIDI_BEAT_TRIGGER'] as SyncMode[]).map((m) => (
+              <Pressable key={m} style={[s.chip, syncMode === m && s.chipOn]} onPress={() => onSyncModeChange(m)}>
+                <Text style={s.chipText}>{m}</Text>
+              </Pressable>
+            ))}
+          </View>
 
           <Text style={s.label}>Tempo (BPM)</Text>
           <TextInput value={String(bpm)} onChangeText={onTempoInput} keyboardType="number-pad" style={s.input} />
@@ -94,12 +135,13 @@ export default function HomeScreen() {
 
           <Text style={s.meta}>Detected Tap BPM: {derivedBpm ?? '—'}</Text>
           <Text style={s.meta}>MIDI Clock BPM: {midiBpm ?? '—'}</Text>
+          <Text style={s.meta}>Beat-trigger active: {syncState.running ? 'yes' : 'no'}</Text>
           <Pressable style={s.btnGhost} onPress={applyDerivedTempo}>
             <Text style={s.btnGhostText}>Use Detected BPM</Text>
           </Pressable>
         </View>
 
-        <Text style={s.foot}>Next: wire BLE transport + real MIDI source + mic onset capture</Text>
+        <Text style={s.foot}>Next: replace mock with BLE GATT transport on nRF firmware</Text>
       </View>
     </SafeAreaView>
   );
@@ -114,6 +156,7 @@ const s = StyleSheet.create({
   label: { color: '#9FB0BD', fontSize: 12, fontWeight: '600' },
   input: { backgroundColor: '#0D1116', borderColor: '#1D242C', borderWidth: 1, borderRadius: 12, color: '#F2F5F7', fontSize: 24, paddingHorizontal: 14, paddingVertical: 10, fontWeight: '700' },
   row: { flexDirection: 'row', gap: 10 },
+  rowWrap: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   btn: { flex: 1, backgroundColor: '#1A222B', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   btnActive: { backgroundColor: '#2A6BF2' },
   btnText: { color: 'white', fontWeight: '600' },

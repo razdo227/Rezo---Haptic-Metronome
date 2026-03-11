@@ -10,6 +10,7 @@ export type DeviceStatus = {
 
 export type MidiSyncEvent =
   | { type: 'clock' }
+  | { type: 'beat' }
   | { type: 'start' }
   | { type: 'stop' }
   | { type: 'continue' }
