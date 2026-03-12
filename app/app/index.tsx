@@ -17,6 +17,7 @@ export default function HomeScreen() {
   const [midiBpm, setMidiBpm] = useState<number | null>(null);
   const [syncMode, setSyncMode] = useState<SyncMode>('INTERNAL');
   const [syncState, setSyncState] = useState(defaultSyncRuntime());
+  const [vibrationType, setVibrationType] = useState<'soft' | 'pulse' | 'sharp'>('pulse');
 
   const derivedBpm = useMemo(() => bpmFromTapPoints(samples), [samples]);
 
@@ -100,6 +101,12 @@ export default function HomeScreen() {
     MIDI_BEAT_TRIGGER: 'Beat Trigger'
   };
 
+  const vibrationLabel: Record<'soft' | 'pulse' | 'sharp', string> = {
+    soft: 'Soft',
+    pulse: 'Pulse',
+    sharp: 'Sharp'
+  };
+
   return (
     <SafeAreaView style={s.root}>
       <ScrollView contentContainerStyle={s.scrollContent}>
@@ -115,7 +122,6 @@ export default function HomeScreen() {
                 <Text style={s.statusText}>{isConnected ? 'Connected' : 'Linking'}</Text>
               </View>
             </View>
-            <Text style={s.subtitle}>Dark, low-distraction tempo control for internal timing, MIDI clock follow, and beat-trigger sync.</Text>
             <View style={s.metricsRow}>
               <View style={s.metricCard}>
                 <Text style={s.metricLabel}>Current BPM</Text>
@@ -131,7 +137,6 @@ export default function HomeScreen() {
           <View style={s.sectionCard}>
             <View style={s.sectionHeader}>
               <Text style={s.sectionTitle}>Transport</Text>
-              <Text style={s.sectionMeta}>Mock transport active</Text>
             </View>
             <View style={s.tempoBlock}>
               <Text style={s.label}>Tempo</Text>
@@ -142,18 +147,25 @@ export default function HomeScreen() {
             </View>
             <View style={s.buttonRow}>
               <Pressable style={[s.primaryButton, isRunning && s.primaryButtonActive]} onPress={toggleTransport}>
-                <Text style={s.primaryButtonText}>{isRunning ? 'Stop Transport' : 'Start Transport'}</Text>
+                <Text style={s.primaryButtonText}>{isRunning ? 'Stop' : 'Start'}</Text>
               </Pressable>
               <Pressable style={s.secondaryButton} onPress={onTapTempo}>
-                <Text style={s.secondaryButtonText}>Tap Tempo</Text>
+                <Text style={s.secondaryButtonText}>Tap</Text>
               </Pressable>
+            </View>
+            <Text style={s.label}>Vibration</Text>
+            <View style={s.chipRow}>
+              {(['soft', 'pulse', 'sharp'] as const).map((v) => (
+                <Pressable key={v} style={[s.chip, vibrationType === v && s.chipActive]} onPress={() => setVibrationType(v)}>
+                  <Text style={[s.chipText, vibrationType === v && s.chipTextActive]}>{vibrationLabel[v]}</Text>
+                </Pressable>
+              ))}
             </View>
           </View>
 
           <View style={s.sectionCard}>
             <View style={s.sectionHeader}>
               <Text style={s.sectionTitle}>Sync</Text>
-              <Text style={s.sectionMeta}>Select the incoming timing behavior</Text>
             </View>
             <Text style={s.label}>Mode</Text>
             <View style={s.chipRow}>
@@ -177,8 +189,7 @@ export default function HomeScreen() {
 
           <View style={s.sectionCard}>
             <View style={s.sectionHeader}>
-              <Text style={s.sectionTitle}>Tap Detection</Text>
-              <Text style={s.sectionMeta}>Manual tap capture or mic pipeline placeholder</Text>
+              <Text style={s.sectionTitle}>Tap</Text>
             </View>
             <Text style={s.label}>Input Mode</Text>
             <View style={s.chipRow}>
@@ -186,7 +197,7 @@ export default function HomeScreen() {
                 <Text style={[s.chipText, mode === 'manual' && s.chipTextActive]}>Manual</Text>
               </Pressable>
               <Pressable style={[s.chip, mode === 'mic' && s.chipActive]} onPress={() => setMode('mic')}>
-                <Text style={[s.chipText, mode === 'mic' && s.chipTextActive]}>Mic Tap</Text>
+                <Text style={[s.chipText, mode === 'mic' && s.chipTextActive]}>Mic</Text>
               </Pressable>
             </View>
             <View style={s.telemetryStack}>
@@ -196,11 +207,9 @@ export default function HomeScreen() {
               </View>
             </View>
             <Pressable style={s.secondaryButtonWide} onPress={applyDerivedTempo}>
-              <Text style={s.secondaryButtonText}>Use Detected BPM</Text>
+              <Text style={s.secondaryButtonText}>Use BPM</Text>
             </Pressable>
           </View>
-
-          <Text style={s.foot}>Next: replace the mock transport with BLE GATT transport on the nRF firmware.</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
