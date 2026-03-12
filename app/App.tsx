@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from './src/ui/theme';
 import { bpmFromTapPoints, pushTap, type TapPoint } from './src/lib/tempo';
-import { BleTextTransportService, MockTransportService, type VibrationPattern } from './src/services/transportService';
+import { MockTransportService, type VibrationPattern } from './src/services/transportService';
 import { MidiClockTracker } from './src/lib/midiClock';
 import { applyMidiEvent, defaultSyncRuntime, shouldTimeoutBeatTrigger, type SyncMode } from './src/lib/syncMode';
 
-const transport = Platform.OS === 'web' ? new MockTransportService() : new BleTextTransportService();
+const transport = new MockTransportService();
 
 export default function App() {
   const [bpm, setBpm] = useState(120);
@@ -22,11 +22,19 @@ export default function App() {
   const derivedBpm = useMemo(() => bpmFromTapPoints(samples), [samples]);
 
   useEffect(() => {
-    transport.connect().then(() => setIsConnected(true)).catch(() => setIsConnected(false));
     return () => {
       transport.disconnect();
     };
   }, []);
+
+  const onConnect = async () => {
+    try {
+      await transport.connect();
+      setIsConnected(true);
+    } catch {
+      setIsConnected(false);
+    }
+  };
 
   useEffect(() => {
     const tracker = new MidiClockTracker();
@@ -125,10 +133,10 @@ export default function App() {
               <Text style={s.titleCompact}>Rezo Haptic</Text>
               <Text style={s.topMeta}>BPM {bpm} · {syncModeLabel[syncMode]}</Text>
             </View>
-            <View style={[s.statusPill, isConnected ? s.statusPillOnline : s.statusPillOffline]}>
+            <Pressable style={[s.statusPill, isConnected ? s.statusPillOnline : s.statusPillOffline]} onPress={onConnect}>
               <View style={[s.statusDot, isConnected ? s.statusDotOnline : s.statusDotOffline]} />
-              <Text style={s.statusText}>{isConnected ? 'Online' : 'Linking'}</Text>
-            </View>
+              <Text style={s.statusText}>{isConnected ? 'Online' : 'Connect'}</Text>
+            </Pressable>
           </View>
 
           <View style={s.sectionCard}>
