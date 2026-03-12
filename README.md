@@ -38,6 +38,7 @@ Custom PCB + wearable enclosure
   - `app/src/ui/theme.ts` — design tokens
   - `app/tests/` — unit tests (Vitest)
 - `Kicad Schematics/` — schematic, PCB, and DRC/ERC outputs
+- `firmware/` — nRF firmware scaffold + Arduino-ready sketch
 - `fab/` — manufacturing files (Gerbers, drill, ZIP)
 - `docs/` — project specs, workflows, and engineering notes
 
