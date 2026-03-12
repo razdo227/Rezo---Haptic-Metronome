@@ -25,9 +25,14 @@ Write to command characteristic:
 - `MODE:INTERNAL`
 - `MODE:MIDI_CLOCK`
 - `MODE:MIDI_BEAT`
-- `VIB:SOFT`
-- `VIB:PULSE`
-- `VIB:SHARP`
+- `PATTERN:CLICK`
+- `PATTERN:PULSE`
+- `PATTERN:ACCENT`
+- `PATTERN:DOUBLE`
+- `PATTERN:TRIPLET`
+- `PATTERN:RAMP_UP`
+- `PATTERN:RAMP_DOWN`
+- `PATTERN:BUZZ_HOLD`
 - `BEAT` (manual external beat event for testing in MIDI_BEAT mode)
 - `PING`
 

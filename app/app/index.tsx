@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { bpmFromTapPoints, pushTap, type TapPoint } from '../src/lib/tempo';
-import { MockTransportService } from '../src/services/transportService';
+import { BleTextTransportService, MockTransportService, type VibrationPattern } from '../src/services/transportService';
 import { MidiClockTracker } from '../src/lib/midiClock';
 import { applyMidiEvent, defaultSyncRuntime, shouldTimeoutBeatTrigger, type SyncMode } from '../src/lib/syncMode';
 import { colors, radius, spacing, typography } from '../src/ui/theme';
 
-const transport = new MockTransportService();
+const transport = Platform.OS === 'web' ? new MockTransportService() : new BleTextTransportService();
 
 export default function HomeScreen() {
   const [bpm, setBpm] = useState(120);
@@ -17,12 +17,12 @@ export default function HomeScreen() {
   const [midiBpm, setMidiBpm] = useState<number | null>(null);
   const [syncMode, setSyncMode] = useState<SyncMode>('INTERNAL');
   const [syncState, setSyncState] = useState(defaultSyncRuntime());
-  const [vibrationType, setVibrationType] = useState<'soft' | 'pulse' | 'sharp'>('pulse');
+  const [vibrationType, setVibrationType] = useState<VibrationPattern>('PULSE');
 
   const derivedBpm = useMemo(() => bpmFromTapPoints(samples), [samples]);
 
   useEffect(() => {
-    transport.connect().then(() => setIsConnected(true));
+    transport.connect().then(() => setIsConnected(true)).catch(() => setIsConnected(false));
     return () => {
       transport.disconnect();
     };
@@ -95,17 +95,27 @@ export default function HomeScreen() {
     await transport.setSyncMode(next);
   };
 
+  const onPatternChange = async (next: VibrationPattern) => {
+    setVibrationType(next);
+    await transport.setPattern(next);
+  };
+
   const syncModeLabel: Record<SyncMode, string> = {
     INTERNAL: 'Internal',
     MIDI_CLOCK_FOLLOW: 'MIDI Clock',
     MIDI_BEAT_TRIGGER: 'Beat Trigger'
   };
 
-  const vibrationLabel: Record<'soft' | 'pulse' | 'sharp', string> = {
-    soft: 'Soft',
-    pulse: 'Pulse',
-    sharp: 'Sharp'
-  };
+  const vibrationOptions: { key: VibrationPattern; label: string }[] = [
+    { key: 'CLICK', label: 'Click' },
+    { key: 'PULSE', label: 'Pulse' },
+    { key: 'ACCENT', label: 'Accent' },
+    { key: 'DOUBLE', label: 'Double' },
+    { key: 'TRIPLET', label: 'Triplet' },
+    { key: 'RAMP_UP', label: 'Ramp Up' },
+    { key: 'RAMP_DOWN', label: 'Ramp Down' },
+    { key: 'BUZZ_HOLD', label: 'Buzz' }
+  ];
 
   return (
     <SafeAreaView style={s.root}>
@@ -141,11 +151,11 @@ export default function HomeScreen() {
                 <Text style={s.secondaryButtonText}>Tap</Text>
               </Pressable>
             </View>
-            <Text style={s.label}>Vibration</Text>
+            <Text style={s.label}>Pattern</Text>
             <View style={s.chipRow}>
-              {(['soft', 'pulse', 'sharp'] as const).map((v) => (
-                <Pressable key={v} style={[s.chip, vibrationType === v && s.chipActive]} onPress={() => setVibrationType(v)}>
-                  <Text style={[s.chipText, vibrationType === v && s.chipTextActive]}>{vibrationLabel[v]}</Text>
+              {vibrationOptions.map((v) => (
+                <Pressable key={v.key} style={[s.chip, vibrationType === v.key && s.chipActive]} onPress={() => onPatternChange(v.key)}>
+                  <Text style={[s.chipText, vibrationType === v.key && s.chipTextActive]}>{v.label}</Text>
                 </Pressable>
               ))}
             </View>
