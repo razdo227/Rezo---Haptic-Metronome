@@ -6,7 +6,10 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0B0D10"
     },
@@ -17,12 +20,23 @@
       }
     },
     "android": {
-      "package": "com.razdo.rezohaptic"
+      "package": "com.razdo.rezohaptic",
+      "permissions": [
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0D10"
+      }
     },
     "web": {
       "bundler": "metro"
     },
-    "plugins": [],
+    "plugins": [
+      "react-native-ble-plx"
+    ],
     "extra": {
       "eas": {
         "projectId": "3bc8d984-2b83-4a17-aee5-b639e9267cd8"
