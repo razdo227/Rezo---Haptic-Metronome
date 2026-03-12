@@ -111,26 +111,14 @@ export default function HomeScreen() {
     <SafeAreaView style={s.root}>
       <ScrollView contentContainerStyle={s.scrollContent}>
         <View style={s.container}>
-          <View style={s.hero}>
-            <View style={s.heroTopRow}>
-              <View>
-                <Text style={s.eyebrow}>CLOCK MASTER</Text>
-                <Text style={s.title}>Rezo Haptic</Text>
-              </View>
-              <View style={[s.statusPill, isConnected ? s.statusPillOnline : s.statusPillOffline]}>
-                <View style={[s.statusDot, isConnected ? s.statusDotOnline : s.statusDotOffline]} />
-                <Text style={s.statusText}>{isConnected ? 'Connected' : 'Linking'}</Text>
-              </View>
+          <View style={s.topBar}>
+            <View style={s.topBarLeft}>
+              <Text style={s.titleCompact}>Rezo Haptic</Text>
+              <Text style={s.topMeta}>BPM {bpm} · {syncModeLabel[syncMode]}</Text>
             </View>
-            <View style={s.metricsRow}>
-              <View style={s.metricCard}>
-                <Text style={s.metricLabel}>Current BPM</Text>
-                <Text style={s.metricValue}>{bpm}</Text>
-              </View>
-              <View style={s.metricCard}>
-                <Text style={s.metricLabel}>Sync Source</Text>
-                <Text style={s.metricValueCompact}>{syncModeLabel[syncMode]}</Text>
-              </View>
+            <View style={[s.statusPill, isConnected ? s.statusPillOnline : s.statusPillOffline]}>
+              <View style={[s.statusDot, isConnected ? s.statusDotOnline : s.statusDotOffline]} />
+              <Text style={s.statusText}>{isConnected ? 'Online' : 'Linking'}</Text>
             </View>
           </View>
 
@@ -220,18 +208,21 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   scrollContent: { flexGrow: 1 },
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl, gap: spacing.lg },
-  hero: {
+  topBar: {
     backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.xl,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.md
   },
-  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md },
-  eyebrow: { color: colors.textSubtle, ...typography.eyebrow },
-  title: { color: colors.text, ...typography.title },
-  subtitle: { color: colors.textMuted, ...typography.body, maxWidth: 560 },
+  topBarLeft: { flex: 1, gap: 2 },
+  titleCompact: { color: colors.text, fontSize: 22, lineHeight: 28, fontWeight: '700' },
+  topMeta: { color: colors.textMuted, ...typography.bodyStrong },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
