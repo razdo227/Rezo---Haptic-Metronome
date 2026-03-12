@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { bpmFromTapPoints, pushTap, type TapPoint } from '../src/lib/tempo';
-import { BleTextTransportService, MockTransportService, type VibrationPattern } from '../src/services/transportService';
-import { MidiClockTracker } from '../src/lib/midiClock';
-import { applyMidiEvent, defaultSyncRuntime, shouldTimeoutBeatTrigger, type SyncMode } from '../src/lib/syncMode';
-import { colors, radius, spacing, typography } from '../src/ui/theme';
+import { colors, radius, spacing, typography } from './src/ui/theme';
+import { bpmFromTapPoints, pushTap, type TapPoint } from './src/lib/tempo';
+import { BleTextTransportService, MockTransportService, type VibrationPattern } from './src/services/transportService';
+import { MidiClockTracker } from './src/lib/midiClock';
+import { applyMidiEvent, defaultSyncRuntime, shouldTimeoutBeatTrigger, type SyncMode } from './src/lib/syncMode';
 
 const transport = Platform.OS === 'web' ? new MockTransportService() : new BleTextTransportService();
 
-export default function HomeScreen() {
+export default function App() {
   const [bpm, setBpm] = useState(120);
   const [isRunning, setIsRunning] = useState(false);
   const [samples, setSamples] = useState<TapPoint[]>([]);
@@ -28,14 +28,13 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // placeholder MIDI path for UI/dev validation
   useEffect(() => {
     const tracker = new MidiClockTracker();
     let t = Date.now();
 
     const pulse = setInterval(() => {
       tracker.onClock(t);
-      t += 20.833; // ~120 BPM clock pulses
+      t += 20.833;
       const val = tracker.getBpm();
       if (val) setMidiBpm(val);
     }, 21);
@@ -136,13 +135,10 @@ export default function HomeScreen() {
             <View style={s.sectionHeader}>
               <Text style={s.sectionTitle}>Transport</Text>
             </View>
-            <View style={s.tempoBlock}>
-              <Text style={s.label}>Tempo</Text>
-              <View style={s.tempoInputWrap}>
-                <TextInput value={String(bpm)} onChangeText={onTempoInput} keyboardType="number-pad" style={s.input} />
-                <Text style={s.inputSuffix}>BPM</Text>
-              </View>
-            </View>
+
+            <Text style={s.label}>Tempo</Text>
+            <TextInput value={String(bpm)} onChangeText={onTempoInput} keyboardType="number-pad" style={s.input} />
+
             <View style={s.buttonRow}>
               <Pressable style={[s.primaryButton, isRunning && s.primaryButtonActive]} onPress={toggleTransport}>
                 <Text style={s.primaryButtonText}>{isRunning ? 'Stop' : 'Start'}</Text>
@@ -165,7 +161,6 @@ export default function HomeScreen() {
             <View style={s.sectionHeader}>
               <Text style={s.sectionTitle}>Sync</Text>
             </View>
-            <Text style={s.label}>Mode</Text>
             <View style={s.chipRow}>
               {(['INTERNAL', 'MIDI_CLOCK_FOLLOW', 'MIDI_BEAT_TRIGGER'] as SyncMode[]).map((m) => (
                 <Pressable key={m} style={[s.chip, syncMode === m && s.chipActive]} onPress={() => onSyncModeChange(m)}>
@@ -173,23 +168,12 @@ export default function HomeScreen() {
                 </Pressable>
               ))}
             </View>
-            <View style={s.telemetryRow}>
-              <View style={s.telemetryItem}>
-                <Text style={s.telemetryLabel}>MIDI Clock</Text>
-                <Text style={s.telemetryValue}>{midiBpm ?? '—'}</Text>
-              </View>
-              <View style={s.telemetryItem}>
-                <Text style={s.telemetryLabel}>Beat Trigger</Text>
-                <Text style={s.telemetryValue}>{syncState.running ? 'Active' : 'Idle'}</Text>
-              </View>
-            </View>
           </View>
 
           <View style={s.sectionCard}>
             <View style={s.sectionHeader}>
               <Text style={s.sectionTitle}>Tap</Text>
             </View>
-            <Text style={s.label}>Input Mode</Text>
             <View style={s.chipRow}>
               <Pressable style={[s.chip, mode === 'manual' && s.chipActive]} onPress={() => setMode('manual')}>
                 <Text style={[s.chipText, mode === 'manual' && s.chipTextActive]}>Manual</Text>
@@ -198,12 +182,22 @@ export default function HomeScreen() {
                 <Text style={[s.chipText, mode === 'mic' && s.chipTextActive]}>Mic</Text>
               </Pressable>
             </View>
-            <View style={s.telemetryStack}>
-              <View style={s.telemetryLine}>
-                <Text style={s.telemetryLabel}>Detected tap BPM</Text>
-                <Text style={s.telemetryValue}>{derivedBpm ?? '—'}</Text>
+
+            <View style={s.metricsRow}>
+              <View style={s.metricCard}>
+                <Text style={s.metricLabel}>Detected</Text>
+                <Text style={s.metricValue}>{derivedBpm ?? '—'}</Text>
+              </View>
+              <View style={s.metricCard}>
+                <Text style={s.metricLabel}>MIDI</Text>
+                <Text style={s.metricValue}>{midiBpm ?? '—'}</Text>
+              </View>
+              <View style={s.metricCard}>
+                <Text style={s.metricLabel}>Beat</Text>
+                <Text style={s.metricValue}>{syncState.running ? 'On' : 'Off'}</Text>
               </View>
             </View>
+
             <Pressable style={s.secondaryButtonWide} onPress={applyDerivedTempo}>
               <Text style={s.secondaryButtonText}>Use BPM</Text>
             </Pressable>
@@ -233,139 +227,32 @@ const s = StyleSheet.create({
   topBarLeft: { flex: 1, gap: 2 },
   titleCompact: { color: colors.text, fontSize: 22, lineHeight: 28, fontWeight: '700' },
   topMeta: { color: colors.textMuted, ...typography.bodyStrong },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderWidth: 1
-  },
-  statusPillOnline: { backgroundColor: colors.panelMuted, borderColor: colors.borderStrong },
-  statusPillOffline: { backgroundColor: colors.panelMuted, borderColor: colors.border },
-  statusDot: { width: 8, height: 8, borderRadius: radius.pill },
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderWidth: 1 },
+  statusPillOnline: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
+  statusPillOffline: { backgroundColor: colors.panel, borderColor: colors.border },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusDotOnline: { backgroundColor: colors.success },
-  statusDotOffline: { backgroundColor: colors.textSubtle },
+  statusDotOffline: { backgroundColor: colors.danger },
   statusText: { color: colors.text, ...typography.chip },
-  metricsRow: { flexDirection: 'row', gap: spacing.md, flexWrap: 'wrap' },
-  metricCard: {
-    minWidth: 148,
-    flexGrow: 1,
-    backgroundColor: colors.panelMuted,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.xs
-  },
-  metricLabel: { color: colors.textSubtle, ...typography.eyebrow },
-  metricValue: { color: colors.text, ...typography.metric },
-  metricValueCompact: { color: colors.text, ...typography.sectionTitle },
-  sectionCard: {
-    backgroundColor: colors.panel,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    gap: spacing.md
-  },
-  sectionHeader: { gap: spacing.xs },
+  sectionCard: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, gap: spacing.md },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { color: colors.text, ...typography.sectionTitle },
-  sectionMeta: { color: colors.textMuted, ...typography.body },
-  label: { color: colors.textSubtle, ...typography.eyebrow },
-  tempoBlock: { gap: spacing.sm },
-  tempoInputWrap: {
-    backgroundColor: colors.panelMuted,
-    borderColor: colors.borderStrong,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm
-  },
-  input: {
-    flex: 1,
-    color: colors.text,
-    paddingVertical: 0,
-    ...typography.input
-  },
-  inputSuffix: { color: colors.textMuted, ...typography.bodyStrong },
-  buttonRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  primaryButton: {
-    minHeight: 52,
-    flexGrow: 1,
-    minWidth: 160,
-    backgroundColor: colors.accentMuted,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  primaryButtonActive: { backgroundColor: colors.accentStrong },
+  label: { color: colors.textMuted, ...typography.eyebrow },
+  input: { backgroundColor: colors.panelMuted, borderColor: colors.borderStrong, borderWidth: 1, borderRadius: radius.sm, color: colors.text, ...typography.input, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  buttonRow: { flexDirection: 'row', gap: spacing.sm },
+  primaryButton: { flex: 1, backgroundColor: colors.accentStrong, borderRadius: radius.sm, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  primaryButtonActive: { backgroundColor: colors.accent },
   primaryButtonText: { color: colors.text, ...typography.button },
-  secondaryButton: {
-    minHeight: 52,
-    flexGrow: 1,
-    minWidth: 140,
-    backgroundColor: colors.panelMuted,
-    borderColor: colors.borderStrong,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  secondaryButtonWide: {
-    minHeight: 52,
-    backgroundColor: colors.panelMuted,
-    borderColor: colors.borderStrong,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
+  secondaryButton: { flex: 1, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.panelMuted, borderRadius: radius.sm, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  secondaryButtonWide: { borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.panelMuted, borderRadius: radius.sm, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center' },
   secondaryButtonText: { color: colors.text, ...typography.button },
-  chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.panelMuted
-  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: { borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.panelMuted, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   chipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
   chipText: { color: colors.textMuted, ...typography.chip },
   chipTextActive: { color: colors.text },
-  telemetryRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  telemetryItem: {
-    flexGrow: 1,
-    minWidth: 140,
-    backgroundColor: colors.panelMuted,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    gap: spacing.xs
-  },
-  telemetryStack: { gap: spacing.sm },
-  telemetryLine: {
-    backgroundColor: colors.panelMuted,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm
-  },
-  telemetryLabel: { color: colors.textMuted, ...typography.body },
-  telemetryValue: { color: colors.text, ...typography.bodyStrong },
-  foot: {
-    color: colors.textSubtle,
-    ...typography.body
-  }
+  metricsRow: { flexDirection: 'row', gap: spacing.sm },
+  metricCard: { flex: 1, backgroundColor: colors.panelMuted, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, gap: spacing.xs },
+  metricLabel: { color: colors.textSubtle, ...typography.chip },
+  metricValue: { color: colors.text, ...typography.metric }
 });

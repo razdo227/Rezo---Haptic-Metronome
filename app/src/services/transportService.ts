@@ -53,9 +53,9 @@ export class BleTextTransportService implements TransportService {
   private readonly cmdCharUUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
 
   async connect(): Promise<void> {
-    // Lazy import keeps web/tests safe.
-    const mod = await import('react-native-ble-plx');
-    const { BleManager } = mod as any;
+    // Runtime require keeps bundling predictable across RN targets.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { BleManager } = require('react-native-ble-plx');
     const manager = new BleManager();
 
     await manager.startDeviceScan([this.serviceUUID], null, async (error: any, device: any) => {
@@ -67,7 +67,7 @@ export class BleTextTransportService implements TransportService {
         this.char = await this.device.writeCharacteristicWithResponseForService(
           this.serviceUUID,
           this.cmdCharUUID,
-          btoa('PING')
+          this.toBase64('PING')
         );
       }
     });
@@ -82,9 +82,21 @@ export class BleTextTransportService implements TransportService {
     }
   }
 
+  private toBase64(input: string): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = unescape(encodeURIComponent(input));
+    let output = '';
+    for (let block = 0, charCode: number, idx = 0, map = chars; str.charAt(idx | 0) || ((map = '='), idx % 1); output += map.charAt(63 & (block >> (8 - (idx % 1) * 8)))) {
+      charCode = str.charCodeAt((idx += 3 / 4));
+      if (charCode > 0xff) throw new Error('Base64 encode failed');
+      block = (block << 8) | charCode;
+    }
+    return output;
+  }
+
   private async send(cmd: string): Promise<void> {
     if (!this.device) return;
-    const base64 = btoa(cmd);
+    const base64 = this.toBase64(cmd);
     await this.device.writeCharacteristicWithResponseForService(this.serviceUUID, this.cmdCharUUID, base64);
   }
 
