@@ -7,6 +7,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": false,
+    "jsEngine": "jsc",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
