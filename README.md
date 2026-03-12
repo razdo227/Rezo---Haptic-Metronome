@@ -1,5 +1,9 @@
 # Rezo — Haptic Metronome
 
+![Status](https://img.shields.io/badge/status-active-2f6feb)
+![Platform](https://img.shields.io/badge/platform-Expo%20%7C%20nRF52840-3b3f46)
+![License](https://img.shields.io/badge/license-MIT-5b6573)
+
 A hardware + firmware + mobile app capstone project for a wearable haptic metronome.
 
 ## Architecture (at a glance)
@@ -44,6 +48,16 @@ Custom PCB + wearable enclosure
 - Tests: passing (`vitest`)
 - PCB: v0.1 DRC cleaned to non-critical warnings + Gerbers exported
 - Routing: OpenClaw project routing and task system set up
+
+## Build matrix
+
+| Workstream | Status | Notes |
+|---|---|---|
+| Mobile App | In Progress | Core UI and sync controls implemented |
+| Firmware | In Progress | Sync mode protocol defined; implementation next |
+| PCB (v0.1) | In Progress | DRC stabilized; fabrication files generated |
+| Validation | In Progress | Unit tests passing; HIL tests pending |
+| Research Study | Planned | Protocol and analysis pipeline outlined |
 
 ## Run app locally
 
