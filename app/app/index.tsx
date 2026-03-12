@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { bpmFromTapPoints, pushTap, type TapPoint } from '../src/lib/tempo';
 import { MockTransportService } from '../src/services/transportService';
 import { MidiClockTracker } from '../src/lib/midiClock';
 import { applyMidiEvent, defaultSyncRuntime, shouldTimeoutBeatTrigger, type SyncMode } from '../src/lib/syncMode';
+import { colors, radius, spacing, typography } from '../src/ui/theme';
 
 const transport = new MockTransportService();
 
@@ -93,78 +94,268 @@ export default function HomeScreen() {
     await transport.setSyncMode(next);
   };
 
+  const syncModeLabel: Record<SyncMode, string> = {
+    INTERNAL: 'Internal',
+    MIDI_CLOCK_FOLLOW: 'MIDI Clock',
+    MIDI_BEAT_TRIGGER: 'Beat Trigger'
+  };
+
   return (
     <SafeAreaView style={s.root}>
-      <View style={s.container}>
-        <Text style={s.title}>Rezo Haptic</Text>
-        <Text style={s.subtitle}>nRF clock-master + MIDI beat-trigger ready</Text>
+      <ScrollView contentContainerStyle={s.scrollContent}>
+        <View style={s.container}>
+          <View style={s.hero}>
+            <View style={s.heroTopRow}>
+              <View>
+                <Text style={s.eyebrow}>CLOCK MASTER</Text>
+                <Text style={s.title}>Rezo Haptic</Text>
+              </View>
+              <View style={[s.statusPill, isConnected ? s.statusPillOnline : s.statusPillOffline]}>
+                <View style={[s.statusDot, isConnected ? s.statusDotOnline : s.statusDotOffline]} />
+                <Text style={s.statusText}>{isConnected ? 'Connected' : 'Linking'}</Text>
+              </View>
+            </View>
+            <Text style={s.subtitle}>Dark, low-distraction tempo control for internal timing, MIDI clock follow, and beat-trigger sync.</Text>
+            <View style={s.metricsRow}>
+              <View style={s.metricCard}>
+                <Text style={s.metricLabel}>Current BPM</Text>
+                <Text style={s.metricValue}>{bpm}</Text>
+              </View>
+              <View style={s.metricCard}>
+                <Text style={s.metricLabel}>Sync Source</Text>
+                <Text style={s.metricValueCompact}>{syncModeLabel[syncMode]}</Text>
+              </View>
+            </View>
+          </View>
 
-        <View style={s.card}>
-          <Text style={s.label}>Device</Text>
-          <Text style={s.meta}>{isConnected ? 'Connected (mock transport)' : 'Connecting…'}</Text>
-
-          <Text style={s.label}>Sync Mode</Text>
-          <View style={s.rowWrap}>
-            {(['INTERNAL', 'MIDI_CLOCK_FOLLOW', 'MIDI_BEAT_TRIGGER'] as SyncMode[]).map((m) => (
-              <Pressable key={m} style={[s.chip, syncMode === m && s.chipOn]} onPress={() => onSyncModeChange(m)}>
-                <Text style={s.chipText}>{m}</Text>
+          <View style={s.sectionCard}>
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>Transport</Text>
+              <Text style={s.sectionMeta}>Mock transport active</Text>
+            </View>
+            <View style={s.tempoBlock}>
+              <Text style={s.label}>Tempo</Text>
+              <View style={s.tempoInputWrap}>
+                <TextInput value={String(bpm)} onChangeText={onTempoInput} keyboardType="number-pad" style={s.input} />
+                <Text style={s.inputSuffix}>BPM</Text>
+              </View>
+            </View>
+            <View style={s.buttonRow}>
+              <Pressable style={[s.primaryButton, isRunning && s.primaryButtonActive]} onPress={toggleTransport}>
+                <Text style={s.primaryButtonText}>{isRunning ? 'Stop Transport' : 'Start Transport'}</Text>
               </Pressable>
-            ))}
+              <Pressable style={s.secondaryButton} onPress={onTapTempo}>
+                <Text style={s.secondaryButtonText}>Tap Tempo</Text>
+              </Pressable>
+            </View>
           </View>
 
-          <Text style={s.label}>Tempo (BPM)</Text>
-          <TextInput value={String(bpm)} onChangeText={onTempoInput} keyboardType="number-pad" style={s.input} />
+          <View style={s.sectionCard}>
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>Sync</Text>
+              <Text style={s.sectionMeta}>Select the incoming timing behavior</Text>
+            </View>
+            <Text style={s.label}>Mode</Text>
+            <View style={s.chipRow}>
+              {(['INTERNAL', 'MIDI_CLOCK_FOLLOW', 'MIDI_BEAT_TRIGGER'] as SyncMode[]).map((m) => (
+                <Pressable key={m} style={[s.chip, syncMode === m && s.chipActive]} onPress={() => onSyncModeChange(m)}>
+                  <Text style={[s.chipText, syncMode === m && s.chipTextActive]}>{syncModeLabel[m]}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={s.telemetryRow}>
+              <View style={s.telemetryItem}>
+                <Text style={s.telemetryLabel}>MIDI Clock</Text>
+                <Text style={s.telemetryValue}>{midiBpm ?? '—'}</Text>
+              </View>
+              <View style={s.telemetryItem}>
+                <Text style={s.telemetryLabel}>Beat Trigger</Text>
+                <Text style={s.telemetryValue}>{syncState.running ? 'Active' : 'Idle'}</Text>
+              </View>
+            </View>
+          </View>
 
-          <View style={s.row}>
-            <Pressable style={[s.btn, isRunning && s.btnActive]} onPress={toggleTransport}>
-              <Text style={s.btnText}>{isRunning ? 'Stop' : 'Start'}</Text>
-            </Pressable>
-            <Pressable style={s.btnGhost} onPress={onTapTempo}>
-              <Text style={s.btnGhostText}>Tap Tempo</Text>
+          <View style={s.sectionCard}>
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>Tap Detection</Text>
+              <Text style={s.sectionMeta}>Manual tap capture or mic pipeline placeholder</Text>
+            </View>
+            <Text style={s.label}>Input Mode</Text>
+            <View style={s.chipRow}>
+              <Pressable style={[s.chip, mode === 'manual' && s.chipActive]} onPress={() => setMode('manual')}>
+                <Text style={[s.chipText, mode === 'manual' && s.chipTextActive]}>Manual</Text>
+              </Pressable>
+              <Pressable style={[s.chip, mode === 'mic' && s.chipActive]} onPress={() => setMode('mic')}>
+                <Text style={[s.chipText, mode === 'mic' && s.chipTextActive]}>Mic Tap</Text>
+              </Pressable>
+            </View>
+            <View style={s.telemetryStack}>
+              <View style={s.telemetryLine}>
+                <Text style={s.telemetryLabel}>Detected tap BPM</Text>
+                <Text style={s.telemetryValue}>{derivedBpm ?? '—'}</Text>
+              </View>
+            </View>
+            <Pressable style={s.secondaryButtonWide} onPress={applyDerivedTempo}>
+              <Text style={s.secondaryButtonText}>Use Detected BPM</Text>
             </Pressable>
           </View>
 
-          <View style={s.row}>
-            <Pressable style={[s.chip, mode === 'manual' && s.chipOn]} onPress={() => setMode('manual')}>
-              <Text style={s.chipText}>Manual</Text>
-            </Pressable>
-            <Pressable style={[s.chip, mode === 'mic' && s.chipOn]} onPress={() => setMode('mic')}>
-              <Text style={s.chipText}>Mic Tap (Sense)</Text>
-            </Pressable>
-          </View>
-
-          <Text style={s.meta}>Detected Tap BPM: {derivedBpm ?? '—'}</Text>
-          <Text style={s.meta}>MIDI Clock BPM: {midiBpm ?? '—'}</Text>
-          <Text style={s.meta}>Beat-trigger active: {syncState.running ? 'yes' : 'no'}</Text>
-          <Pressable style={s.btnGhost} onPress={applyDerivedTempo}>
-            <Text style={s.btnGhostText}>Use Detected BPM</Text>
-          </Pressable>
+          <Text style={s.foot}>Next: replace the mock transport with BLE GATT transport on the nRF firmware.</Text>
         </View>
-
-        <Text style={s.foot}>Next: replace mock with BLE GATT transport on nRF firmware</Text>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0B0D10' },
-  container: { flex: 1, padding: 20, gap: 14 },
-  title: { color: '#F2F5F7', fontSize: 28, fontWeight: '700' },
-  subtitle: { color: '#97A3AE', fontSize: 14, fontWeight: '400' },
-  card: { backgroundColor: '#12161B', borderColor: '#1D242C', borderWidth: 1, borderRadius: 16, padding: 16, gap: 12 },
-  label: { color: '#9FB0BD', fontSize: 12, fontWeight: '600' },
-  input: { backgroundColor: '#0D1116', borderColor: '#1D242C', borderWidth: 1, borderRadius: 12, color: '#F2F5F7', fontSize: 24, paddingHorizontal: 14, paddingVertical: 10, fontWeight: '700' },
-  row: { flexDirection: 'row', gap: 10 },
-  rowWrap: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  btn: { flex: 1, backgroundColor: '#1A222B', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnActive: { backgroundColor: '#2A6BF2' },
-  btnText: { color: 'white', fontWeight: '600' },
-  btnGhost: { flex: 1, borderColor: '#2A3642', borderWidth: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnGhostText: { color: '#C9D1D9', fontWeight: '600' },
-  chip: { borderWidth: 1, borderColor: '#2A3642', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  chipOn: { backgroundColor: '#1F2935' },
-  chipText: { color: '#C9D1D9', fontSize: 12, fontWeight: '400' },
-  meta: { color: '#B8C4CE', fontSize: 13, fontWeight: '400' },
-  foot: { color: '#7E8A95', fontSize: 12, fontWeight: '400' }
+  root: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { flexGrow: 1 },
+  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl, gap: spacing.lg },
+  hero: {
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    gap: spacing.md
+  },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md },
+  eyebrow: { color: colors.textSubtle, ...typography.eyebrow },
+  title: { color: colors.text, ...typography.title },
+  subtitle: { color: colors.textMuted, ...typography.body, maxWidth: 560 },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderWidth: 1
+  },
+  statusPillOnline: { backgroundColor: colors.panelMuted, borderColor: colors.borderStrong },
+  statusPillOffline: { backgroundColor: colors.panelMuted, borderColor: colors.border },
+  statusDot: { width: 8, height: 8, borderRadius: radius.pill },
+  statusDotOnline: { backgroundColor: colors.success },
+  statusDotOffline: { backgroundColor: colors.textSubtle },
+  statusText: { color: colors.text, ...typography.chip },
+  metricsRow: { flexDirection: 'row', gap: spacing.md, flexWrap: 'wrap' },
+  metricCard: {
+    minWidth: 148,
+    flexGrow: 1,
+    backgroundColor: colors.panelMuted,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.xs
+  },
+  metricLabel: { color: colors.textSubtle, ...typography.eyebrow },
+  metricValue: { color: colors.text, ...typography.metric },
+  metricValueCompact: { color: colors.text, ...typography.sectionTitle },
+  sectionCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    gap: spacing.md
+  },
+  sectionHeader: { gap: spacing.xs },
+  sectionTitle: { color: colors.text, ...typography.sectionTitle },
+  sectionMeta: { color: colors.textMuted, ...typography.body },
+  label: { color: colors.textSubtle, ...typography.eyebrow },
+  tempoBlock: { gap: spacing.sm },
+  tempoInputWrap: {
+    backgroundColor: colors.panelMuted,
+    borderColor: colors.borderStrong,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm
+  },
+  input: {
+    flex: 1,
+    color: colors.text,
+    paddingVertical: 0,
+    ...typography.input
+  },
+  inputSuffix: { color: colors.textMuted, ...typography.bodyStrong },
+  buttonRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  primaryButton: {
+    minHeight: 52,
+    flexGrow: 1,
+    minWidth: 160,
+    backgroundColor: colors.accentMuted,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  primaryButtonActive: { backgroundColor: colors.accentStrong },
+  primaryButtonText: { color: colors.text, ...typography.button },
+  secondaryButton: {
+    minHeight: 52,
+    flexGrow: 1,
+    minWidth: 140,
+    backgroundColor: colors.panelMuted,
+    borderColor: colors.borderStrong,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  secondaryButtonWide: {
+    minHeight: 52,
+    backgroundColor: colors.panelMuted,
+    borderColor: colors.borderStrong,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  secondaryButtonText: { color: colors.text, ...typography.button },
+  chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.panelMuted
+  },
+  chipActive: { backgroundColor: colors.accentMuted, borderColor: colors.accent },
+  chipText: { color: colors.textMuted, ...typography.chip },
+  chipTextActive: { color: colors.text },
+  telemetryRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  telemetryItem: {
+    flexGrow: 1,
+    minWidth: 140,
+    backgroundColor: colors.panelMuted,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    gap: spacing.xs
+  },
+  telemetryStack: { gap: spacing.sm },
+  telemetryLine: {
+    backgroundColor: colors.panelMuted,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm
+  },
+  telemetryLabel: { color: colors.textMuted, ...typography.body },
+  telemetryValue: { color: colors.text, ...typography.bodyStrong },
+  foot: {
+    color: colors.textSubtle,
+    ...typography.body
+  }
 });

@@ -3,9 +3,9 @@
 Cross-platform app scaffold using Expo + React Native (iOS/Android/Web).
 
 ## Design system
-- Minimal UI
-- Font pairing: **Space Grotesk** (headings) + **Inter** (body/UI)
-- Dark neutral palette optimized for stage/low-light use
+- Minimal dark UI with elevated panels and low-glare contrast
+- Shared tokens in `src/ui/theme.ts` for color, spacing, radius, and type scale
+- Consistent pill chips, primary/secondary actions, and grouped telemetry blocks
 
 ## Run
 ```bash
