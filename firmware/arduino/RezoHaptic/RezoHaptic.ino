@@ -4,10 +4,27 @@
 #include <Adafruit_DRV2605.h>
 
 // =========================
-// Rezo Haptic v0.2 (Arduino)
+// Rezo Haptic v0.3 (Arduino)
 // Target: Seeed XIAO nRF52840
 // Driver: DRV2605 (I2C)
 // =========================
+
+// ---------- UX tuning constants ----------
+// LED behavior while idle and advertising (pairing-ready).
+// Pattern: two short flashes, then a pause.
+constexpr uint32_t PAIR_LED_PHASE_MS = 1200;  // total cycle length
+constexpr uint32_t PAIR_LED_ON1_START_MS = 0;
+constexpr uint32_t PAIR_LED_ON1_END_MS = 90;
+constexpr uint32_t PAIR_LED_ON2_START_MS = 200;
+constexpr uint32_t PAIR_LED_ON2_END_MS = 290;
+
+// XIAO nRF52840 onboard LED is active-low.
+constexpr uint8_t LED_ON_LEVEL = LOW;
+constexpr uint8_t LED_OFF_LEVEL = HIGH;
+
+// Startup haptic cue (single pulse at boot).
+// DRV2605 effect IDs are from the built-in waveform library.
+constexpr uint8_t STARTUP_WAVEFORM_ID = 47;  // strong pulse
 
 enum SyncMode : uint8_t {
   SYNC_INTERNAL = 0,
@@ -58,6 +75,18 @@ const char* patternName(VibrationPattern p) {
   }
 }
 
+void setLed(bool on) {
+  digitalWrite(LED_BUILTIN, on ? LED_ON_LEVEL : LED_OFF_LEVEL);
+}
+
+void updatePairingLed(uint32_t nowMs) {
+  // Only used when no BLE central is connected.
+  const uint32_t phase = nowMs % PAIR_LED_PHASE_MS;
+  const bool on = (phase >= PAIR_LED_ON1_START_MS && phase < PAIR_LED_ON1_END_MS) ||
+                  (phase >= PAIR_LED_ON2_START_MS && phase < PAIR_LED_ON2_END_MS);
+  setLed(on);
+}
+
 void loadWaveform(VibrationPattern p) {
   // DRV2605 waveform slots (0..7), 0 terminator
   switch (p) {
@@ -101,6 +130,12 @@ void loadWaveform(VibrationPattern p) {
 
 void fireHapticPulse() {
   loadWaveform(state.pattern);
+  drv.go();
+}
+
+void playStartupHapticCue() {
+  drv.setWaveform(0, STARTUP_WAVEFORM_ID);
+  drv.setWaveform(1, 0);
   drv.go();
 }
 
@@ -222,8 +257,14 @@ void setupDrv2605() {
 }
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  setLed(false);
+
   setupDrv2605();
+  playStartupHapticCue();
+
   setupBle();
+
   state.running = false;
   state.bpm = 120;
   state.syncMode = SYNC_INTERNAL;
@@ -233,34 +274,43 @@ void setup() {
 }
 
 void loop() {
+  BLE.poll();
+
   BLEDevice central = BLE.central();
-  if (central) {
-    while (central.connected()) {
-      BLE.poll();
+  const bool connected = central && central.connected();
 
-      if (cmdChar.written()) {
-        applyCommand(cmdChar.value());
-      }
+  if (!connected) {
+    // Pairing-ready UX cue while advertising and waiting for app connection.
+    updatePairingLed(millis());
+    delay(1);
+    return;
+  }
 
-      const uint32_t now = millis();
-      if (state.running && (state.syncMode == SYNC_INTERNAL || state.syncMode == SYNC_MIDI_CLOCK_FOLLOW)) {
-        if ((int32_t)(now - state.nextPulseMs) >= 0) {
-          fireHapticPulse();
-          state.nextPulseMs += beatIntervalMs(state.bpm);
-        }
-      }
+  // Connected: keep LED steady off to indicate active link.
+  setLed(false);
 
-      if (state.running && state.syncMode == SYNC_MIDI_BEAT_TRIGGER) {
-        if (state.lastBeatMs > 0 && (now - state.lastBeatMs) > state.beatTriggerTimeoutMs) {
-          state.running = false;
-          publishStatus();
-        }
-      }
+  if (cmdChar.written()) {
+    applyCommand(cmdChar.value());
+  }
 
-      delay(1);
+  const uint32_t now = millis();
+
+  if (state.running && (state.syncMode == SYNC_INTERNAL || state.syncMode == SYNC_MIDI_CLOCK_FOLLOW)) {
+    // INTERNAL mode uses local tempo scheduler.
+    // MIDI_CLOCK mode currently reuses the same scheduler as a compatibility scaffold;
+    // future BLE-MIDI clock ticks can update scheduling without changing command protocol.
+    if ((int32_t)(now - state.nextPulseMs) >= 0) {
+      fireHapticPulse();
+      state.nextPulseMs += beatIntervalMs(state.bpm);
     }
   }
 
-  BLE.poll();
+  if (state.running && state.syncMode == SYNC_MIDI_BEAT_TRIGGER) {
+    if (state.lastBeatMs > 0 && (now - state.lastBeatMs) > state.beatTriggerTimeoutMs) {
+      state.running = false;
+      publishStatus();
+    }
+  }
+
   delay(1);
 }
