@@ -24,8 +24,7 @@ const pairing = new BlePairingService();
 
 const mapSyncModeToFw = (mode: SyncMode): string => {
   if (mode === 'INTERNAL') return 'INTERNAL';
-  if (mode === 'MIDI_CLOCK_FOLLOW') return 'MIDI_CLOCK';
-  return 'MIDI_BEAT';
+  return 'BLE_MIDI';
 };
 
 export class RezoTransportService implements TransportService {

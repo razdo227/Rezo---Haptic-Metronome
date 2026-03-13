@@ -5,6 +5,7 @@ export type DiscoveredDevice = { id: string; name: string };
 export class BlePairingService {
   private manager: any = null;
   private connected: any = null;
+  private scanning = false;
   private readonly serviceUUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
   private readonly cmdCharUUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
 
@@ -18,11 +19,15 @@ export class BlePairingService {
 
   async requestPermissionsIfNeeded() {
     if (Platform.OS !== 'android') return;
-    await PermissionsAndroid.requestMultiple([
+    const result = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT
     ]);
+    const denied = Object.values(result).some((value) => value !== PermissionsAndroid.RESULTS.GRANTED);
+    if (denied) {
+      throw new Error('Bluetooth permissions not granted');
+    }
   }
 
   async scanDevices(timeoutMs = 6000): Promise<DiscoveredDevice[]> {
@@ -32,18 +37,20 @@ export class BlePairingService {
 
     await this.requestPermissionsIfNeeded();
     this.ensureManager();
+    this.stopScan();
 
     const out = new Map<string, DiscoveredDevice>();
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
-        this.manager?.stopDeviceScan();
+        this.stopScan();
         resolve();
       }, timeoutMs);
 
+      this.scanning = true;
       this.manager.startDeviceScan([this.serviceUUID], null, (error: any, device: any) => {
         if (error) {
           clearTimeout(timer);
-          this.manager?.stopDeviceScan();
+          this.stopScan();
           resolve();
           return;
         }
@@ -55,12 +62,19 @@ export class BlePairingService {
       });
     });
 
-    return Array.from(out.values());
+    return Array.from(out.values()).sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  stopScan() {
+    if (!this.scanning) return;
+    this.manager?.stopDeviceScan();
+    this.scanning = false;
   }
 
   async connect(deviceId: string): Promise<boolean> {
     if (Platform.OS === 'web') return true;
     this.ensureManager();
+    this.stopScan();
     try {
       const device = await this.manager.connectToDevice(deviceId, { timeout: 12000 });
       await device.discoverAllServicesAndCharacteristics();
@@ -73,6 +87,7 @@ export class BlePairingService {
 
   async disconnect() {
     try {
+      this.stopScan();
       if (this.connected) {
         await this.connected.cancelConnection();
       }
@@ -96,5 +111,11 @@ export class BlePairingService {
     if (Platform.OS === 'web' || !this.connected) return;
     const payload = this.toBase64(cmd);
     await this.connected.writeCharacteristicWithResponseForService(this.serviceUUID, this.cmdCharUUID, payload);
+  }
+
+  async destroy() {
+    await this.disconnect();
+    this.manager?.destroy?.();
+    this.manager = null;
   }
 }
