@@ -2,6 +2,5 @@ app/node_modules/
 app/.expo/
 app/dist/
 app/dist-android/
-app/android/
 app/screenshots/
 fab/
