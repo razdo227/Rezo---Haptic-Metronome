@@ -1,17 +1,40 @@
-export type TransportState = 'stopped' | 'running' | 'paused';
+export type ConnectionState = 'disconnected' | 'scanning' | 'connecting' | 'connected';
+export type SyncMode = 'INTERNAL' | 'MIDI_CLOCK' | 'MIDI_BEAT';
 
-export type DeviceStatus = {
+export interface FoundDevice {
+  id: string;
+  name: string;
+  rssi: number;
+}
+
+export interface DeviceState {
+  connectionState: ConnectionState;
+  deviceId: string | null;
+  isPlaying: boolean;
   bpm: number;
-  beat: number;
-  bar: number;
-  batteryPct?: number;
-  transport: TransportState;
-};
+  syncMode: SyncMode;
+  activePattern: string;
+  // local-only (not from firmware)
+  currentBeat: number;
+  timeSignatureNumerator: number;
+  foundDevices: FoundDevice[];
+  batteryPercent: number | null;
+}
 
-export type MidiSyncEvent =
-  | { type: 'clock' }
-  | { type: 'beat' }
-  | { type: 'start' }
-  | { type: 'stop' }
-  | { type: 'continue' }
-  | { type: 'spp'; position: number };
+export type DeviceAction =
+  | { type: 'SET_CONNECTION'; payload: { connectionState: ConnectionState; deviceId?: string | null } }
+  | { type: 'UPDATE_FROM_STATUS'; payload: Partial<Pick<DeviceState, 'isPlaying' | 'bpm' | 'syncMode' | 'activePattern'>> }
+  | { type: 'SET_BPM_OPTIMISTIC'; payload: number }
+  | { type: 'SET_PATTERN_OPTIMISTIC'; payload: string }
+  | { type: 'SET_PLAYING_OPTIMISTIC'; payload: boolean }
+  | { type: 'SET_BEAT'; payload: number }
+  | { type: 'SET_TIME_SIG'; payload: number }
+  | { type: 'ADD_FOUND_DEVICE'; payload: FoundDevice }
+  | { type: 'CLEAR_FOUND_DEVICES' }
+  | { type: 'SET_BATTERY'; payload: number };
+
+export interface PatternInfo {
+  id: string;
+  displayName: string;
+  description: string;
+}

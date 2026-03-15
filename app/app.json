@@ -1,48 +1,52 @@
 {
   "expo": {
-    "name": "Rezo Haptic",
+    "name": "Rezo",
     "slug": "rezo-haptic",
-    "scheme": "rezohaptic",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
-    "jsEngine": "jsc",
     "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B0D10"
+      "backgroundColor": "#0A0A0F"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
+      "bundleIdentifier": "com.razdo.rezohaptic",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Rezo uses Bluetooth to connect to your haptic metronome device."
+        "NSBluetoothAlwaysUsageDescription": "Rezo needs Bluetooth to connect to your haptic metronome bracelet.",
+        "NSBluetoothPeripheralUsageDescription": "Rezo needs Bluetooth to connect to your haptic metronome bracelet."
       }
     },
     "android": {
       "package": "com.razdo.rezohaptic",
-      "permissions": [
-        "BLUETOOTH_SCAN",
-        "BLUETOOTH_CONNECT",
-        "ACCESS_FINE_LOCATION"
-      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B0D10"
-      }
-    },
-    "web": {
-      "bundler": "metro"
+        "backgroundColor": "#0A0A0F"
+      },
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_ADVERTISE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "plugins": [
-      "react-native-ble-plx"
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": ["central"],
+          "bluetoothAlwaysPermission": "Allow Rezo to use Bluetooth to connect to your haptic metronome bracelet."
+        }
+      ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "3bc8d984-2b83-4a17-aee5-b639e9267cd8"
-      }
-    },
-    "owner": "razdo.27"
+    "assetBundlePatterns": [
+      "**/*"
+    ]
   }
 }

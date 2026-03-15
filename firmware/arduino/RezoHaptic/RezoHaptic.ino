@@ -17,6 +17,37 @@
 #include <Wire.h>
 #include <Adafruit_DRV2605.h>
 
+// =========================
+// Rezo Haptic v0.3 (Arduino)
+// Target: Seeed XIAO nRF52840
+// Driver: DRV2605 (I2C)
+// =========================
+
+// ---------- Battery reading -------------------
+// XIAO nRF52840: VBAT -> 1MΩ -> P0.31(AIN7) -> 510kΩ -> GND (gated by P0.14).
+// Seeed BSP maps P0.31 to Arduino pin 32 (PIN_VBAT) and P0.14 to pin 14 (VBAT_ENABLE).
+// VBAT_ENABLE is ACTIVE LOW — pull LOW to connect the bottom leg of the divider.
+// ADC ref: AR_INTERNAL_3_0 (3.0 V internal reference), 12-bit resolution.
+// True divider multiplier: (1000k + 510k) / 510k ≈ 2.9608
+// Corrected integer formula: mV = (raw × 8882) / 4096   [8882 = round(3000 × 2.9608)]
+#ifndef PIN_VBAT
+#define PIN_VBAT     (32)  // P0.31, AIN7 — defined in Seeed BSP variant.h
+#endif
+#ifndef VBAT_ENABLE
+#define VBAT_ENABLE  (14)  // P0.14 — active LOW enables the voltage divider
+#endif
+
+// How often to sample the battery (ms). 30 s is plenty.
+constexpr uint32_t BATTERY_SAMPLE_INTERVAL_MS = 30000;
+
+// ---------- UX tuning constants ----------
+// LED behavior while idle and advertising (pairing-ready).
+// Pattern: two short flashes, then a pause.
+constexpr uint32_t PAIR_LED_PHASE_MS = 1200;  // total cycle length
+constexpr uint32_t PAIR_LED_ON1_START_MS = 0;
+constexpr uint32_t PAIR_LED_ON1_END_MS = 90;
+constexpr uint32_t PAIR_LED_ON2_START_MS = 200;
+constexpr uint32_t PAIR_LED_ON2_END_MS = 290;
 // Second I2C bus for right motor on D2 (SDA=P0.28) and D3 (SCL=P0.29).
 // Declared as a new MbedI2C object rather than reusing Wire1, which is
 // already defined by the BSP and cannot be redeclared or reconfigured.
@@ -54,6 +85,44 @@ constexpr uint32_t PAIR_ON2_END    = 290;
 // -------------------------------------------------------------
 constexpr uint16_t BPM_MIN = 20;
 constexpr uint16_t BPM_MAX = 300;
+
+// Startup haptic cue (single pulse at boot).
+// DRV2605 effect IDs are from the built-in waveform library.
+constexpr uint8_t STARTUP_WAVEFORM_ID = 47;  // strong pulse
+
+enum SyncMode : uint8_t {
+  SYNC_INTERNAL = 0,
+  SYNC_MIDI_CLOCK_FOLLOW = 1,
+  SYNC_MIDI_BEAT_TRIGGER = 2,
+};
+
+enum VibrationPattern : uint8_t {
+  PATTERN_CLICK = 0,
+  PATTERN_PULSE,
+  PATTERN_ACCENT,
+  PATTERN_DOUBLE,
+  PATTERN_TRIPLET,
+  PATTERN_RAMP_UP,
+  PATTERN_RAMP_DOWN,
+  PATTERN_BUZZ_HOLD,
+};
+
+struct RuntimeState {
+  bool running = false;
+  uint16_t bpm = 120;
+  SyncMode syncMode = SYNC_INTERNAL;
+  VibrationPattern pattern = PATTERN_PULSE;
+
+  uint32_t nextPulseMs = 0;
+  uint32_t lastBeatMs = 0;
+  uint16_t beatTriggerTimeoutMs = 2000;
+
+  uint8_t batteryPercent = 255;   // 255 = not yet sampled
+  uint32_t lastBatterySampleMs = 0;
+};
+
+RuntimeState state;
+Adafruit_DRV2605 drv;
 
 // -------------------------------------------------------------
 // Vibration pattern library
@@ -175,6 +244,33 @@ Adafruit_DRV2605 drvR;  // right — uses WireR
 //   STATUS (notify+read)   19B10002-...
 // -------------------------------------------------------------
 BLEService rezoService("19B10000-E8F2-537E-4F6C-D104768A1214");
+BLEStringCharacteristic cmdChar("19B10001-E8F2-537E-4F6C-D104768A1214", BLEWrite | BLEWriteWithoutResponse, 64);
+BLEStringCharacteristic statusChar("19B10002-E8F2-537E-4F6C-D104768A1214", BLENotify | BLERead, 128);
+
+const char* patternName(VibrationPattern p) {
+  switch (p) {
+    case PATTERN_CLICK: return "CLICK";
+    case PATTERN_PULSE: return "PULSE";
+    case PATTERN_ACCENT: return "ACCENT";
+    case PATTERN_DOUBLE: return "DOUBLE";
+    case PATTERN_TRIPLET: return "TRIPLET";
+    case PATTERN_RAMP_UP: return "RAMP_UP";
+    case PATTERN_RAMP_DOWN: return "RAMP_DOWN";
+    case PATTERN_BUZZ_HOLD: return "BUZZ_HOLD";
+    default: return "PULSE";
+  }
+}
+
+void setLed(bool on) {
+  digitalWrite(LED_BUILTIN, on ? LED_ON_LEVEL : LED_OFF_LEVEL);
+}
+
+void updatePairingLed(uint32_t nowMs) {
+  // Only used when no BLE central is connected.
+  const uint32_t phase = nowMs % PAIR_LED_PHASE_MS;
+  const bool on = (phase >= PAIR_LED_ON1_START_MS && phase < PAIR_LED_ON1_END_MS) ||
+                  (phase >= PAIR_LED_ON2_START_MS && phase < PAIR_LED_ON2_END_MS);
+  setLed(on);
 BLEStringCharacteristic cmdChar(
   "19B10001-E8F2-537E-4F6C-D104768A1214",
   BLEWrite | BLEWriteWithoutResponse, 64);
@@ -248,6 +344,48 @@ static bool readCharging() {
   return digitalRead(CHG_PIN) == LOW;
 }
 
+void playStartupHapticCue() {
+  drv.setWaveform(0, STARTUP_WAVEFORM_ID);
+  drv.setWaveform(1, 0);
+  drv.go();
+}
+
+uint32_t beatIntervalMs(uint16_t bpm) {
+  if (bpm < 20) bpm = 20;
+  if (bpm > 300) bpm = 300;
+  return 60000UL / bpm;
+}
+
+void scheduleNextInternalPulse(uint32_t nowMs) {
+  state.nextPulseMs = nowMs + beatIntervalMs(state.bpm);
+}
+
+uint8_t sampleBattery() {
+  // Enable divider (active LOW), configure ADC, then sample 8× and average.
+  pinMode(VBAT_ENABLE, OUTPUT);
+  digitalWrite(VBAT_ENABLE, LOW);   // LOW = enables the 510kΩ bottom leg
+  analogReadResolution(12);
+  analogReference(AR_INTERNAL2V4); // 2.4 V range (0.6V ref × 1/4 gain) — available on this BSP
+  delay(5);                         // let ADC settle
+
+  int32_t sum = 0;
+  for (int i = 0; i < 8; i++) sum += analogRead(PIN_VBAT);
+  uint32_t raw = (uint32_t)(sum / 8);
+
+  // Disable divider to stop quiescent current draw (reduces idle power).
+  digitalWrite(VBAT_ENABLE, HIGH);
+
+  // mV = raw × 2400mV × (1000k + 510k)/510k / 4096
+  //     = raw × 7106 / 4096   (7106 = round(2400 × 2.9608))
+  // Divided VBAT max = 4200mV / 2.9608 ≈ 1418mV — safely within 2.4V range.
+  uint32_t mv = (raw * 7106UL) / 4096UL;
+
+  // LiPo usable range: 3300 mV (0 %) → 4200 mV (100 %)
+  if (mv >= 4200) return 100;
+  if (mv <= 3300) return 0;
+  return (uint8_t)((mv - 3300UL) * 100UL / 900UL);
+}
+
 // Update battery state (call every ~10 s to avoid ADC overhead)
 static uint32_t lastBatCheckMs = 0;
 void updateBattery(uint32_t now) {
@@ -262,6 +400,16 @@ void updateBattery(uint32_t now) {
 // Format: run=1;bpm=120;ts=4/4;beat=1;pat=PULSE;bat=87;chg=0
 // -------------------------------------------------------------
 void publishStatus() {
+  char buf[128];
+  const char* mode = (state.syncMode == SYNC_INTERNAL) ? "INTERNAL" : (state.syncMode == SYNC_MIDI_CLOCK_FOLLOW) ? "MIDI_CLOCK" : "MIDI_BEAT";
+  if (state.batteryPercent <= 100) {
+    snprintf(buf, sizeof(buf), "run=%d;bpm=%u;mode=%s;pattern=%s;bat=%u",
+             state.running ? 1 : 0, state.bpm, mode, patternName(state.pattern), state.batteryPercent);
+  } else {
+    // Battery not sampled yet — omit the field so the app keeps its last value.
+    snprintf(buf, sizeof(buf), "run=%d;bpm=%u;mode=%s;pattern=%s",
+             state.running ? 1 : 0, state.bpm, mode, patternName(state.pattern));
+  }
   char buf[128];
   snprintf(buf, sizeof(buf),
     "run=%d;bpm=%u;ts=%u/%u;beat=%u;pat=%s;bat=%u;chg=%d",
@@ -422,6 +570,36 @@ void setup() {
   BLE.addService(rezoService);
   statusChar.writeValue("boot");
   BLE.advertise();
+}
+
+void setupDrv2605() {
+  Wire.begin();
+  if (!drv.begin()) {
+    while (1) delay(250);
+  }
+  drv.selectLibrary(1);
+  drv.setMode(DRV2605_MODE_INTTRIG);
+}
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  setLed(false);
+
+  setupDrv2605();
+  playStartupHapticCue();
+
+  setupBle();
+
+  state.running = false;
+  state.bpm = 120;
+  state.syncMode = SYNC_INTERNAL;
+  state.pattern = PATTERN_PULSE;
+  state.nextPulseMs = millis() + beatIntervalMs(state.bpm);
+
+  // Initial battery sample before the first publishStatus.
+  state.batteryPercent = sampleBattery();
+  state.lastBatterySampleMs = millis();
+
 
   g.nextPulseMs = millis() + beatIntervalMs(g.bpm);
   publishStatus();
@@ -450,6 +628,28 @@ void loop() {
     applyCommand(cmdChar.value());
   }
 
+  const uint32_t now = millis();
+
+  // Re-sample battery every BATTERY_SAMPLE_INTERVAL_MS and push an update.
+  if ((now - state.lastBatterySampleMs) >= BATTERY_SAMPLE_INTERVAL_MS) {
+    state.batteryPercent = sampleBattery();
+    state.lastBatterySampleMs = now;
+    publishStatus();
+  }
+
+  if (state.running && (state.syncMode == SYNC_INTERNAL || state.syncMode == SYNC_MIDI_CLOCK_FOLLOW)) {
+    // INTERNAL mode uses local tempo scheduler.
+    // MIDI_CLOCK mode currently reuses the same scheduler as a compatibility scaffold;
+    // future BLE-MIDI clock ticks can update scheduling without changing command protocol.
+    if ((int32_t)(now - state.nextPulseMs) >= 0) {
+      fireHapticPulse();
+      state.nextPulseMs += beatIntervalMs(state.bpm);
+    }
+  }
+
+  if (state.running && state.syncMode == SYNC_MIDI_BEAT_TRIGGER) {
+    if (state.lastBeatMs > 0 && (now - state.lastBeatMs) > state.beatTriggerTimeoutMs) {
+      state.running = false;
   // -- Battery (non-blocking, every 10 s) --
   updateBattery(now);
 
