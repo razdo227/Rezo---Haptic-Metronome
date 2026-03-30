@@ -199,8 +199,6 @@ void updatePairingLed(uint32_t now) {
 // -------------------------------------------------------------
 // DRV2605L helpers
 // Adafruit_DRV2605::begin() accepts TwoWire* (lib v1.2.0+).
-// On ArduinoCore-mbed, TwoWire is typedef'd to arduino::MbedI2C,
-// so passing &bus (MbedI2C&) as TwoWire* is valid.
 // -------------------------------------------------------------
 static void drv_load_and_fire(Adafruit_DRV2605 &drv, const WaveformSequence &seq) {
   for (uint8_t i = 0; i < 8; i++) {
@@ -391,7 +389,7 @@ void setup() {
 
   // I2C bus init: begin() is called inside drv_init_chip for each bus.
   // Wire  (TWI0): Left motor  — SDA=D4, SCL=D5  (BSP default pins)
-  // WireR (TWI1): Right motor — SDA=D2, SCL=D3  (custom MbedI2C object)
+  // Wire1 (TWI1): Right motor — remap to SDA=D2, SCL=D3 via setPins()
   drv_init_chip(drvL, Wire);
   drv_init_chip(drvR, WireR);
   playStartupCue();
