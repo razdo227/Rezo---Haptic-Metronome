@@ -209,10 +209,33 @@ static void drv_load_and_fire(Adafruit_DRV2605 &drv, const WaveformSequence &seq
   drv.go();
 }
 
+// Write directly to a DRV2605 register over the I2C bus.
+// Used for registers not exposed by the Adafruit library (writeRegister8 is private).
+static void drv_write_reg(arduino::MbedI2C &bus, uint8_t reg, uint8_t val) {
+  bus.beginTransmission(0x5A);
+  bus.write(reg);
+  bus.write(val);
+  bus.endTransmission();
+}
+
 static void drv_init_chip(Adafruit_DRV2605 &drv, arduino::MbedI2C &bus) {
   bus.begin();
   drv.begin(&bus);
-  drv.selectLibrary(6);  // Library 6: LRA waveforms (library 1 is ERM only)
+  drv.useLRA();          // VLV101040A is LRA — switches DRV2605L to LRA drive mode
+  drv.selectLibrary(6);  // Library 6: LRA waveform ROM (library 1 is ERM only)
+
+  // LRA open-loop mode: drive at a fixed frequency instead of closed-loop
+  // back-EMF tracking. Without a prior auto-calibration pass, closed-loop
+  // mode hunts erratically. Open-loop is stable and needs no calibration.
+  //
+  // CONTROL3 reg (0x1D): default 0xA0 — set bit 0 (LRA_OPEN_LOOP) → 0xA1
+  drv_write_reg(bus, 0x1D, 0xA1);
+
+  // OL_LRA_PERIOD reg (0x20): sets open-loop drive frequency.
+  // VLV101040A resonant frequency ≈ 175 Hz.
+  // Formula: reg = (1 / f_hz) / 98.46µs = 5714µs / 98.46µs ≈ 58 = 0x3A
+  drv_write_reg(bus, 0x20, 0x3A);
+
   drv.setMode(DRV2605_MODE_INTTRIG);
 }
 
