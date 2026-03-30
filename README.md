@@ -11,16 +11,20 @@ A hardware + firmware + mobile app capstone project for a wearable haptic metron
 ```text
 Mobile App (Expo / React Native)
   └─ Controls: BPM, transport, sync mode, tap tempo, vibration type
-  └─ Sync Modes: INTERNAL | MIDI_CLOCK_FOLLOW | MIDI_BEAT_TRIGGER
+  └─ Sync Modes: INTERNAL | MIDI_CLOCK | MIDI_BEAT
+            │
+            ├── BLE GATT
+            │
+Desktop Plugin (JUCE VST3/AU) + Rezo Helper
+  └─ DAW transport -> helper IPC -> BLE GATT
+  └─ Defaults device mode to MIDI_CLOCK on desktop connect
             │
             ▼
-BLE GATT Transport (next integration step)
-            │
-            ▼
-nRF52840 (clock-master on device)
+nRF52840 wearable firmware
   └─ Real-time haptic scheduler
-  └─ MIDI sync handling
-  └─ LRA drive path (DRV2605L x2)
+  └─ INTERNAL / MIDI_CLOCK / MIDI_BEAT runtime modes
+  └─ Dual-LRA drive path (DRV2605L x2)
+  └─ Side routing + polyrhythm scheduling
             │
             ▼
 Custom PCB + wearable enclosure
@@ -29,33 +33,35 @@ Custom PCB + wearable enclosure
 ## Repo layout
 
 - `app/` — cross-platform app (Expo/React Native)
-  - `app/app/index.tsx` — main UI
+  - `app/src/screens/MainScreen.tsx` — main device-control UI
+  - `app/src/context/DeviceContext.tsx` — BLE state + status parsing
+  - `app/src/services/BLEService.ts` — BLE transport
   - `app/src/lib/tempo.ts` — tap/BPM logic
-  - `app/src/lib/midiClock.ts` — MIDI clock BPM estimation
-  - `app/src/lib/micTap.ts` — mic onset/tap detection logic
-  - `app/src/lib/syncMode.ts` — sync mode runtime/state machine
-  - `app/src/services/transportService.ts` — transport abstraction (mock now)
-  - `app/src/ui/theme.ts` — design tokens
   - `app/tests/` — unit tests (Vitest)
 - `Kicad Schematics/` — schematic, PCB, and DRC/ERC outputs
 - `firmware/` — nRF firmware scaffold + Arduino-ready sketch
+- `rezo-plugin/` — JUCE desktop plugin, helper app, and tests
+  - `rezo-plugin/Source/` — plugin, helper, BLE bridge, and UI code
+  - `rezo-plugin/Tests/` — Catch2 protocol and transport tests
+  - `rezo-plugin/JUCE/` — JUCE submodule
 - `fab/` — manufacturing files (Gerbers, drill, ZIP)
 - `docs/` — project specs, workflows, and engineering notes
 
 ## Current status
 
-- App UI: professional minimal layout + compact top section
-- App logic: tempo, sync modes, MIDI clock estimator, mic tap pipeline scaffolding
-- Tests: passing (`vitest`)
+- App: BLE control surface for INTERNAL / MIDI_CLOCK / MIDI_BEAT modes
+- Firmware: dual-LRA scheduler with side-routing and polyrhythm support
+- Desktop: JUCE VST3/AU plugin with helper-based BLE bridge for DAWs
+- Tests: app unit tests and plugin Catch2 suite
 - PCB: v0.1 DRC cleaned to non-critical warnings + Gerbers exported
-- Routing: OpenClaw project routing and task system set up
 
 ## Build matrix
 
 | Workstream | Status | Notes |
 |---|---|---|
-| Mobile App | In Progress | Core UI and sync controls implemented |
-| Firmware | In Progress | Sync mode protocol defined; implementation next |
+| Mobile App | In Progress | BLE control path is in place; desktop parity still ongoing |
+| Firmware | In Progress | Desktop/app protocol implemented; hardware tuning continues |
+| Desktop Plugin | In Progress | Helper-based BLE path working in DAWs |
 | PCB (v0.1) | In Progress | DRC stabilized; fabrication files generated |
 | Validation | In Progress | Unit tests passing; HIL tests pending |
 | Research Study | Planned | Protocol and analysis pipeline outlined |
@@ -76,9 +82,18 @@ npm test
 npx tsc --noEmit
 ```
 
+## Build desktop plugin
+
+```bash
+cd rezo-plugin
+cmake -S . -B build/debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/debug --config Debug
+ctest --test-dir build/debug -C Debug --output-on-failure
+```
+
 ## Next priorities
 
-1. Replace mock transport with real BLE GATT integration.
-2. Implement nRF firmware sync-mode state machine to match app protocol.
+1. Add app-side controls for side routing and polyrhythms.
+2. Tune waveform tables for the dual-LRA hardware.
 3. Hardware-in-loop tests for timing jitter and haptic response.
-4. Study pipeline integration (logging + export for analysis).
+4. Publish the desktop/helper workflow and host compatibility notes.

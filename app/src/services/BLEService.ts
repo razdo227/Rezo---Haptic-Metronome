@@ -39,7 +39,10 @@ class BLEService {
       return true;
     }
 
-    const sdkVersion = parseInt(Platform.Version as string, 10);
+    const sdkVersion =
+      typeof Platform.Version === 'string'
+        ? parseInt(Platform.Version, 10)
+        : Platform.Version;
 
     if (sdkVersion >= 31) {
       // Android 12+
