@@ -212,7 +212,6 @@ static void drv_load_and_fire(Adafruit_DRV2605 &drv, const WaveformSequence &seq
 static void drv_init_chip(Adafruit_DRV2605 &drv, arduino::MbedI2C &bus) {
   bus.begin();
   drv.begin(&bus);
-  drv.useLRA();          // VLV101040A is an LRA — enables back-EMF resonance tracking
   drv.selectLibrary(6);  // Library 6: LRA waveforms (library 1 is ERM only)
   drv.setMode(DRV2605_MODE_INTTRIG);
 }
