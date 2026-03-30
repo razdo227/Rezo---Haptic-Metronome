@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for CoreBluetooth inside Logic Pro's AU sandbox (XPC process) -->
+    <key>com.apple.security.bluetooth</key>
+    <true/>
+
+    <!-- Required on macOS 12+ for BLE central role -->
+    <key>com.apple.security.device.bluetooth</key>
+    <true/>
+</dict>
+</plist>

@@ -59,14 +59,31 @@ arduino::MbedI2C WireR(D2, D3);
 
 // -------------------------------------------------------------
 // Vibration pattern library
-// DRV2605L ROM waveform IDs — Texas Instruments effect library 1 (ERM).
-// All effect IDs in WAVEFORMS_NORMAL / WAVEFORMS_ACCENT reference library 1
-// numbering and must be played with selectLibrary(1).
+// DRV2605L ROM waveform IDs — for Vybronics VLV101040A LRAs these should be
+// played from the DRV2605 LRA library (library 6) with the device in LRA mode.
 // Slots: up to 8 waveforms, 0-terminated.
 // WAVEFORMS_ACCENT[i] is the downbeat (beat 1) variant of pattern i.
 // -------------------------------------------------------------
 struct WaveformSequence {
   uint8_t slots[8];
+};
+
+enum class SyncMode : uint8_t {
+  Internal,
+  MidiClock,
+  MidiBeat,
+};
+
+enum class SideMode : uint8_t {
+  Unison,
+  Alternate,
+};
+
+struct ScheduledEvent {
+  uint32_t offsetMs = 0;
+  bool fireLeft = false;
+  bool fireRight = false;
+  bool isDownbeat = false;
 };
 
 static const WaveformSequence WAVEFORMS_NORMAL[] = {
@@ -113,7 +130,7 @@ static const WaveformSequence WAVEFORMS_ACCENT[] = {
   // 2  SOFT_BUMP accent
   {{ 47, 14, 0 }},
   // 3  SHARP accent
-  {{ 16, 4, 0 }},
+  {{ 4, 0 }},
   // 4  DOUBLE accent
   {{ 16, 1, 1, 0 }},
   // 5  TRIPLET accent
@@ -123,7 +140,7 @@ static const WaveformSequence WAVEFORMS_ACCENT[] = {
   // 7  RAMP_DOWN accent
   {{ 58, 75, 0 }},
   // 8  BUZZ_HOLD accent
-  {{ 58, 52, 0 }},
+  {{ 52, 0 }},
   // 9  THUD accent
   {{ 72, 58, 0 }},
   // 10 HEARTBEAT accent
@@ -131,13 +148,13 @@ static const WaveformSequence WAVEFORMS_ACCENT[] = {
   // 11 LONG_BUZZ accent
   {{ 58, 84, 0 }},
   // 12 SOFT_CLICK accent
-  {{ 14, 7, 0 }},
+  {{ 7, 0 }},
   // 13 POPS accent
   {{ 16, 18, 18, 0 }},
   // 14 TRANSITION_HUM accent
   {{ 58, 56, 47, 0 }},
   // 15 STRONG_CLICK accent
-  {{ 72, 16, 0 }},
+  {{ 16, 0 }},
 };
 
 static const char* PATTERN_NAMES[] = {
@@ -155,10 +172,17 @@ struct RezoState {
   uint8_t  timeSigNum  = 4;   // beats per bar (numerator)
   uint8_t  timeSigDen  = 4;   // beat unit (denominator) — informational
   uint8_t  pattern     = 1;   // index into WAVEFORMS_NORMAL / WAVEFORMS_ACCENT
+  SyncMode mode        = SyncMode::Internal;
+  SideMode sideMode    = SideMode::Unison;
+  uint8_t  leftPulses  = 0;   // 0 = follow current bar beat count
+  uint8_t  rightPulses = 0;   // 0 = follow current bar beat count
   uint8_t  beatCount   = 0;   // current beat within bar (0-indexed)
-  uint32_t nextPulseMs = 0;
+  uint32_t barStartMs  = 0;
+  uint8_t  nextEventIx = 0;
   uint8_t  batteryPct  = 0;
   bool     charging    = false;
+  uint8_t  eventCount  = 0;
+  ScheduledEvent events[16];
 };
 
 RezoState g;
@@ -185,6 +209,120 @@ BLEStringCharacteristic statusChar("19B10002-E8F2-537E-4F6C-D104768A1214",
 // -------------------------------------------------------------
 inline uint32_t beatIntervalMs(uint16_t bpm) {
   return 60000UL / bpm;
+}
+
+const char* modeName(SyncMode mode) {
+  switch (mode) {
+    case SyncMode::Internal:  return "INTERNAL";
+    case SyncMode::MidiClock: return "MIDI_CLOCK";
+    case SyncMode::MidiBeat:  return "MIDI_BEAT";
+  }
+  return "INTERNAL";
+}
+
+const char* sideModeName(SideMode mode) {
+  switch (mode) {
+    case SideMode::Unison:    return "UNISON";
+    case SideMode::Alternate: return "ALTERNATE";
+  }
+  return "UNISON";
+}
+
+uint8_t effectivePulseCount(uint8_t configured) {
+  return configured == 0 ? (g.timeSigNum == 0 ? 1 : g.timeSigNum) : configured;
+}
+
+uint32_t barDurationMs() {
+  const uint32_t quarterMs = beatIntervalMs(g.bpm);
+  const uint32_t scaled = quarterMs * static_cast<uint32_t>(g.timeSigNum) * 4UL;
+  const uint8_t beatUnit = g.timeSigDen == 0 ? 1 : g.timeSigDen;
+  const uint32_t result = scaled / beatUnit;
+  return result == 0 ? 1 : result;
+}
+
+uint8_t beatIndexForOffset(uint32_t offsetMs) {
+  const uint32_t barMs = barDurationMs();
+  if (barMs == 0 || g.timeSigNum == 0) return 0;
+  const uint8_t idx = static_cast<uint8_t>((static_cast<uint64_t>(offsetMs) * g.timeSigNum) / barMs);
+  return idx >= g.timeSigNum ? static_cast<uint8_t>(g.timeSigNum - 1) : idx;
+}
+
+bool offsetsMatch(uint32_t a, uint32_t b) {
+  const int32_t delta = static_cast<int32_t>(a) - static_cast<int32_t>(b);
+  return abs(delta) <= 2;
+}
+
+void insertOrMergeEvent(uint32_t offsetMs, bool fireLeft, bool fireRight, bool isDownbeat) {
+  for (uint8_t i = 0; i < g.eventCount; ++i) {
+    if (offsetsMatch(g.events[i].offsetMs, offsetMs)) {
+      g.events[i].fireLeft = g.events[i].fireLeft || fireLeft;
+      g.events[i].fireRight = g.events[i].fireRight || fireRight;
+      g.events[i].isDownbeat = g.events[i].isDownbeat || isDownbeat;
+      return;
+    }
+  }
+
+  if (g.eventCount >= 16) return;
+
+  uint8_t insertAt = g.eventCount;
+  while (insertAt > 0 && g.events[insertAt - 1].offsetMs > offsetMs) {
+    g.events[insertAt] = g.events[insertAt - 1];
+    --insertAt;
+  }
+
+  g.events[insertAt].offsetMs = offsetMs;
+  g.events[insertAt].fireLeft = fireLeft;
+  g.events[insertAt].fireRight = fireRight;
+  g.events[insertAt].isDownbeat = isDownbeat;
+  ++g.eventCount;
+}
+
+void rebuildBarSchedule() {
+  g.eventCount = 0;
+  g.nextEventIx = 0;
+
+  if (g.mode == SyncMode::MidiBeat) {
+    return;
+  }
+
+  const uint32_t barMs = barDurationMs();
+  const uint8_t leftCount = effectivePulseCount(g.leftPulses);
+  const uint8_t rightCount = effectivePulseCount(g.rightPulses);
+
+  auto offsetFor = [barMs] (uint8_t index, uint8_t total) -> uint32_t {
+    const uint8_t divisor = total == 0 ? 1 : total;
+    return static_cast<uint32_t>((static_cast<uint64_t>(index) * barMs) / divisor);
+  };
+
+  if (g.sideMode == SideMode::Alternate) {
+    for (uint8_t i = 0; i < leftCount; ++i) {
+      insertOrMergeEvent(offsetFor(i, leftCount), false, false, i == 0);
+    }
+    for (uint8_t i = 0; i < rightCount; ++i) {
+      insertOrMergeEvent(offsetFor(i, rightCount), false, false, i == 0);
+    }
+
+    bool nextLeft = true;
+    for (uint8_t i = 0; i < g.eventCount; ++i) {
+      g.events[i].fireLeft = nextLeft;
+      g.events[i].fireRight = !nextLeft;
+      nextLeft = !nextLeft;
+    }
+    return;
+  }
+
+  for (uint8_t i = 0; i < leftCount; ++i) {
+    insertOrMergeEvent(offsetFor(i, leftCount), true, false, i == 0);
+  }
+  for (uint8_t i = 0; i < rightCount; ++i) {
+    insertOrMergeEvent(offsetFor(i, rightCount), false, true, i == 0);
+  }
+}
+
+void resetScheduler(uint32_t now) {
+  g.barStartMs = now;
+  g.beatCount = 0;
+  rebuildBarSchedule();
 }
 
 void setLed(bool on) {
@@ -214,21 +352,70 @@ static void drv_load_and_fire(Adafruit_DRV2605 &drv, const WaveformSequence &seq
 static void drv_init_chip(Adafruit_DRV2605 &drv, arduino::MbedI2C &bus) {
   bus.begin();
   drv.begin(&bus);
-  drv.selectLibrary(1);  // Library 1: ERM ROM — all waveform IDs in this firmware
-                         // reference library 1 numbering.
+  drv.useLRA();
+  drv.selectLibrary(6);  // Library 6: LRA library
   drv.setMode(DRV2605_MODE_INTTRIG);
 }
 
+void fireMotorPulse(Adafruit_DRV2605 &drv, uint8_t patternIndex, bool isDownbeat) {
+  if (patternIndex >= PATTERN_COUNT) patternIndex = 1;
+  const WaveformSequence &seq = isDownbeat ? WAVEFORMS_ACCENT[patternIndex]
+                                           : WAVEFORMS_NORMAL[patternIndex];
+  drv_load_and_fire(drv, seq);
+}
+
+void fireLeftPulse(bool isDownbeat) {
+  fireMotorPulse(drvL, g.pattern, isDownbeat);
+}
+
+void fireRightPulse(bool isDownbeat) {
+  fireMotorPulse(drvR, g.pattern, isDownbeat);
+}
+
 void firePulse(bool isDownbeat) {
-  const WaveformSequence &seq = isDownbeat ? WAVEFORMS_ACCENT[g.pattern]
-                                            : WAVEFORMS_NORMAL[g.pattern];
-  drv_load_and_fire(drvL, seq);
-  drv_load_and_fire(drvR, seq);
+  fireLeftPulse(isDownbeat);
+  fireRightPulse(isDownbeat);
+}
+
+void fireScheduledEvent(const ScheduledEvent& event) {
+  if (event.fireLeft) {
+    fireLeftPulse(event.isDownbeat);
+  }
+  if (event.fireRight) {
+    fireRightPulse(event.isDownbeat);
+  }
+  g.beatCount = beatIndexForOffset(event.offsetMs);
+  publishStatus();
+}
+
+void runEventScheduler(uint32_t now) {
+  if (!g.running || g.mode == SyncMode::MidiBeat || g.eventCount == 0) {
+    return;
+  }
+
+  const uint32_t barMs = barDurationMs();
+  while (static_cast<int32_t>(now - (g.barStartMs + barMs)) >= 0) {
+    g.barStartMs += barMs;
+    g.nextEventIx = 0;
+    g.beatCount = 0;
+  }
+
+  while (g.nextEventIx < g.eventCount) {
+    const auto& event = g.events[g.nextEventIx];
+    const uint32_t dueAt = g.barStartMs + event.offsetMs;
+    if (static_cast<int32_t>(now - dueAt) < 0) {
+      break;
+    }
+
+    fireScheduledEvent(event);
+    ++g.nextEventIx;
+  }
 }
 
 void playStartupCue() {
   WaveformSequence cue = {{ 47, 0 }};
   drv_load_and_fire(drvL, cue);
+  delay(120);
   drv_load_and_fire(drvR, cue);
 }
 
@@ -273,15 +460,19 @@ void updateBattery(uint32_t now) {
 
 // -------------------------------------------------------------
 // BLE status notify
-// Format: run=1;bpm=120;ts=4/4;beat=1;pat=PULSE;bat=87;chg=0
+// Format: run=1;bpm=120;ts=4/4;mode=INTERNAL;side=UNISON;poly=4:4;beat=1;pattern=PULSE;bat=87;chg=0
 // -------------------------------------------------------------
 void publishStatus() {
   char buf[128];
   snprintf(buf, sizeof(buf),
-    "run=%d;bpm=%u;ts=%u/%u;beat=%u;pat=%s;bat=%u;chg=%d",
+    "run=%d;bpm=%u;ts=%u/%u;mode=%s;side=%s;poly=%u:%u;beat=%u;pattern=%s;bat=%u;chg=%d",
     g.running ? 1 : 0,
     g.bpm,
     g.timeSigNum, g.timeSigDen,
+    modeName(g.mode),
+    sideModeName(g.sideMode),
+    effectivePulseCount(g.leftPulses),
+    effectivePulseCount(g.rightPulses),
     (unsigned)(g.beatCount + 1),   // 1-indexed for display
     PATTERN_NAMES[g.pattern],
     g.batteryPct,
@@ -297,11 +488,18 @@ void publishStatus() {
 //   STOP
 //   BPM:<20-300>
 //   TS:<num>/<den>        e.g. TS:3/4
+//   MODE:INTERNAL|MIDI_CLOCK|MIDI_BEAT
+//   SIDE:UNISON|ALTERNATE
+//   POLY:<left>:<right>   0 means "follow time signature beat count"
+//   BEAT                  external beat trigger in MIDI_BEAT mode
 //   PATTERN:<name|index>  e.g. PATTERN:PULSE or PATTERN:1
+//   VIB:<name|index>      legacy alias for PATTERN
 //   BAT?                  → immediate battery status
 //   PING                  → PONG
+//   TEST:LEFT|RIGHT|BOTH  → independent motor verification
 // -------------------------------------------------------------
 static uint8_t patternIndexByName(const String &name) {
+  if (name == "ACCENT") return 15;
   for (uint8_t i = 0; i < PATTERN_COUNT; i++) {
     if (name == PATTERN_NAMES[i]) return i;
   }
@@ -309,14 +507,14 @@ static uint8_t patternIndexByName(const String &name) {
 }
 
 void applyCommand(const String &raw) {
+  const uint32_t now = millis();
   String cmd = raw;
   cmd.trim();
   cmd.toUpperCase();
 
   if (cmd == "START") {
     g.running     = true;
-    g.beatCount   = 0;
-    g.nextPulseMs = millis();
+    resetScheduler(now);
     publishStatus();
     return;
   }
@@ -324,6 +522,9 @@ void applyCommand(const String &raw) {
   if (cmd == "STOP") {
     g.running   = false;
     g.beatCount = 0;
+    g.nextEventIx = 0;
+    drvL.stop();
+    drvR.stop();
     publishStatus();
     return;
   }
@@ -333,6 +534,7 @@ void applyCommand(const String &raw) {
     if (v < BPM_MIN) v = BPM_MIN;
     if (v > BPM_MAX) v = BPM_MAX;
     g.bpm = (uint16_t)v;
+    resetScheduler(now);
     publishStatus();
     return;
   }
@@ -346,15 +548,75 @@ void applyCommand(const String &raw) {
       if (num >= 1 && num <= 32 && den >= 1) {
         g.timeSigNum = (uint8_t)num;
         g.timeSigDen = (uint8_t)den;
-        g.beatCount  = 0;
+        resetScheduler(now);
       }
     }
     publishStatus();
     return;
   }
 
-  if (cmd.startsWith("PATTERN:")) {
-    String token = cmd.substring(8);
+  if (cmd.startsWith("MODE:")) {
+    const String token = cmd.substring(5);
+    if (token == "INTERNAL") {
+      g.mode = SyncMode::Internal;
+    } else if (token == "MIDI_CLOCK") {
+      g.mode = SyncMode::MidiClock;
+    } else if (token == "MIDI_BEAT") {
+      g.mode = SyncMode::MidiBeat;
+    }
+    g.running = false;
+    drvL.stop();
+    drvR.stop();
+    resetScheduler(now);
+    publishStatus();
+    return;
+  }
+
+  if (cmd.startsWith("SIDE:")) {
+    const String token = cmd.substring(5);
+    if (token == "ALTERNATE") {
+      g.sideMode = SideMode::Alternate;
+    } else if (token == "UNISON" || token == "BOTH") {
+      g.sideMode = SideMode::Unison;
+    }
+    resetScheduler(now);
+    publishStatus();
+    return;
+  }
+
+  if (cmd.startsWith("POLY:")) {
+    const String token = cmd.substring(5);
+    const int sep = token.indexOf(':');
+    if (sep > 0) {
+      int left = token.substring(0, sep).toInt();
+      int right = token.substring(sep + 1).toInt();
+      if (left >= 0 && left <= 8 && right >= 0 && right <= 8) {
+        g.leftPulses = (uint8_t)left;
+        g.rightPulses = (uint8_t)right;
+        resetScheduler(now);
+      }
+    }
+    publishStatus();
+    return;
+  }
+
+  if (cmd == "BEAT") {
+    if (g.mode == SyncMode::MidiBeat && g.running) {
+      const bool alternate = g.sideMode == SideMode::Alternate;
+      const bool fireLeft = !alternate || ((g.beatCount % 2) == 0);
+      const bool fireRight = !alternate || !fireLeft;
+      const bool isDownbeat = (g.beatCount == 0);
+      if (fireLeft) fireLeftPulse(isDownbeat);
+      if (fireRight) fireRightPulse(isDownbeat);
+      const uint8_t beatCount = g.timeSigNum == 0 ? 1 : g.timeSigNum;
+      g.beatCount = (g.beatCount + 1) % beatCount;
+      publishStatus();
+    }
+    return;
+  }
+
+  if (cmd.startsWith("PATTERN:") || cmd.startsWith("VIB:")) {
+    String token = cmd.startsWith("PATTERN:") ? cmd.substring(8) : cmd.substring(4);
     bool   isNum = true;
     for (uint8_t i = 0; i < token.length(); i++) {
       if (!isDigit(token[i])) { isNum = false; break; }
@@ -379,6 +641,24 @@ void applyCommand(const String &raw) {
 
   if (cmd == "PING") {
     statusChar.writeValue("PONG");
+    return;
+  }
+
+  if (cmd == "TEST:LEFT") {
+    fireLeftPulse(true);
+    statusChar.writeValue("TEST:LEFT");
+    return;
+  }
+
+  if (cmd == "TEST:RIGHT") {
+    fireRightPulse(true);
+    statusChar.writeValue("TEST:RIGHT");
+    return;
+  }
+
+  if (cmd == "TEST:BOTH") {
+    firePulse(true);
+    statusChar.writeValue("TEST:BOTH");
     return;
   }
 }
@@ -411,7 +691,7 @@ void setup() {
   statusChar.writeValue("boot");
   BLE.advertise();
 
-  g.nextPulseMs = millis() + beatIntervalMs(g.bpm);
+  resetScheduler(millis());
   publishStatus();
 }
 
@@ -427,6 +707,13 @@ void loop() {
 
   // -- LED: double-flash while waiting for a connection --
   if (!connected) {
+    if (g.running || g.mode != SyncMode::Internal) {
+      g.running = false;
+      g.mode = SyncMode::Internal;
+      drvL.stop();
+      drvR.stop();
+      resetScheduler(now);
+    }
     updatePairingLed(now);
     delay(1);
     return;
@@ -442,15 +729,7 @@ void loop() {
   updateBattery(now);
 
   // -- Transport scheduler --
-  if (g.running) {
-    if ((int32_t)(now - g.nextPulseMs) >= 0) {
-      bool isDownbeat = (g.beatCount == 0);
-      firePulse(isDownbeat);
-      g.beatCount    = (g.beatCount + 1) % g.timeSigNum;
-      g.nextPulseMs += beatIntervalMs(g.bpm);
-      publishStatus();
-    }
-  }
+  runEventScheduler(now);
 
   delay(1);
 }
