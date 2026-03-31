@@ -1,15 +1,15 @@
 export const theme = {
   colors: {
-    background: '#0A0A10',
-    surface: '#13131C',
-    surfaceAlt: '#1C1C2A',
-    accent: '#6C63FF',      // electric indigo - primary
-    accentDown: '#FF6584',  // hot pink - beat 1 / playing state
+    background: '#05070D',
+    surface: '#0D111A',
+    surfaceAlt: '#151A24',
+    accent: '#43B4FF',      // electric blue - primary
+    accentDown: '#1E86C7',  // deeper blue for active states
     text: '#F2F2F7',
-    textDim: '#64647A',
-    success: '#4ECDC4',     // teal
-    error: '#FF6584',
-    border: '#2A2A3A',
+    textDim: '#9097A6',
+    success: '#43B4FF',
+    error: '#FF6B6B',
+    border: '#252C3D',
   },
   borderRadius: {
     sm: 12,
