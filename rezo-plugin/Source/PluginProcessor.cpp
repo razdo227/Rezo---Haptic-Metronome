@@ -242,17 +242,8 @@ void RezoProcessor::parameterChanged (const juce::String& paramID, float newValu
 
 void RezoProcessor::pushPatternCmd (int patternIndex)
 {
-    uint8_t firmwarePattern = 15; // Strong
-
-    switch (juce::jlimit (0, 3, patternIndex))
-    {
-        case 0: firmwarePattern = 15; break; // STRONG_CLICK
-        case 1: firmwarePattern = 12; break; // SOFT_CLICK
-        case 2: firmwarePattern = 3;  break; // SHARP
-        case 3: firmwarePattern = 8;  break; // BUZZ_HOLD
-        default: break;
-    }
-
+    const int clamped = juce::jlimit (0, GATT::PLUGIN_PRESET_COUNT - 1, patternIndex);
+    const uint8_t firmwarePattern = GATT::PLUGIN_PRESET_TO_FIRMWARE[clamped];
     pendingPattern.store (firmwarePattern, std::memory_order_relaxed);
     patternDirty.store (true, std::memory_order_release);
 }

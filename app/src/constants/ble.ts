@@ -1,4 +1,4 @@
-import { PatternInfo } from '../types';
+import { PatternId, PatternInfo } from '../types';
 
 export const BLE_DEVICE_NAME = 'Rezo';
 
@@ -18,20 +18,47 @@ export const COMMANDS = {
   BEAT: 'BEAT',
   PING: 'PING',
   BPM: (bpm: number) => `BPM:${bpm}`,
-  PATTERN: (name: string) => `PATTERN:${name}`,
+  TS: (numerator: number, denominator: number = 4) => `TS:${numerator}/${denominator}`,
+  PATTERN: (name: PatternId) => `PATTERN:${name}`,
   MODE: (mode: string) => `MODE:${mode}`,
+  SIDE: (mode: 'UNISON' | 'ALTERNATE') => `SIDE:${mode}`,
+  POLY: (left: number, right: number) => `POLY:${left}:${right}`,
 } as const;
 
-export const PATTERNS: PatternInfo[] = [
-  { id: 'CLICK',     displayName: 'Click',      description: 'Sharp click' },
-  { id: 'PULSE',     displayName: 'Pulse',       description: 'Clean pulse' },
-  { id: 'ACCENT',    displayName: 'Accent',      description: 'Strong accent' },
-  { id: 'DOUBLE',    displayName: 'Double',      description: 'Double tap' },
-  { id: 'TRIPLET',   displayName: 'Triplet',     description: 'Triple tap' },
-  { id: 'RAMP_UP',   displayName: 'Ramp Up',     description: 'Rising intensity' },
-  { id: 'RAMP_DOWN', displayName: 'Ramp Down',   description: 'Falling intensity' },
-  { id: 'BUZZ_HOLD', displayName: 'Buzz Hold',   description: 'Sustained buzz' },
+const CANONICAL_PATTERN_IDS: PatternId[] = [
+  'CLICK',
+  'PULSE',
+  'SOFT_BUMP',
+  'SHARP',
+  'DOUBLE',
+  'TRIPLET',
+  'RAMP_UP',
+  'RAMP_DOWN',
+  'BUZZ_HOLD',
+  'THUD',
+  'HEARTBEAT',
+  'LONG_BUZZ',
+  'SOFT_CLICK',
+  'POPS',
+  'TRANSITION_HUM',
+  'STRONG_CLICK',
 ];
+
+export const PATTERNS: PatternInfo[] = [
+  { id: 'SOFT_CLICK', displayName: 'Soft Click', description: 'Lightest whisper tap' },
+  { id: 'CLICK', displayName: 'Click', description: 'Clean, fast snap' },
+  { id: 'SHARP', displayName: 'Sharp', description: 'Hard, pointed attack' },
+  { id: 'PULSE', displayName: 'Pulse', description: 'Solid medium beat' },
+  { id: 'SOFT_BUMP', displayName: 'Soft Bump', description: 'Full but gentle push' },
+  { id: 'STRONG_CLICK', displayName: 'Accent', description: 'Heaviest defined hit' },
+  { id: 'THUD', displayName: 'Thud', description: 'Deep low-frequency tap' },
+];
+
+export function normalizePatternId(value: string): PatternId {
+  if (value === 'ACCENT') return 'STRONG_CLICK';
+  if (CANONICAL_PATTERN_IDS.includes(value as PatternId)) return value as PatternId;
+  return 'PULSE';
+}
 
 export const SYNC_MODES = [
   { id: 'INTERNAL',   label: 'INTERNAL' },

@@ -17,9 +17,18 @@
 
 ## Haptic engine
 - Intensity control
-- Pulse envelope profiles
-- Left/right motor routing modes
+- Pulse envelope profiles — 16 named patterns (CLICK, PULSE, SHARP, SOFT_BUMP, THUD, STRONG_CLICK, …)
+- Left/right motor routing modes (UNISON / ALTERNATE)
 - Latency offset calibration
+- DRV2605L LRA mode: auto-calibration on boot (`autoCalibrate()`), RATED_VOLTAGE + OD_CLAMP tuned for Vybronics VLV101040A (1.8 V / 2.25 V overdrive)
+- Motor gate: software cutoff per pattern to prevent inter-beat smear
+- Downbeat accent: all patterns use a distinct heavy-click waveform on beat 1
+
+## Cross-platform pattern parity
+- 16 canonical pattern IDs in firmware (`PATTERN_NAMES[]`) — authoritative for all platforms
+- Mobile app exposes 7 user-facing patterns with display names matching plugin presets exactly
+- Plugin presets (7 choices) mapped to firmware indices via `GATTConstants::PLUGIN_PRESET_TO_FIRMWARE[]`
+- Mobile `COMMANDS` helper covers all protocol verbs: BPM, TS, PATTERN, MODE, SIDE, POLY
 
 ## MIDI / click support
 - MIDI Clock slave sync

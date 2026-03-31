@@ -6,9 +6,9 @@ import React, {
   useRef,
   useCallback,
 } from 'react';
-import { DeviceState, DeviceAction, SyncMode, FoundDevice } from '../types';
+import { DeviceState, DeviceAction, SyncMode, FoundDevice, PatternId } from '../types';
 import bleService from '../services/BLEService';
-import { BPM_DEFAULT } from '../constants/ble';
+import { BPM_DEFAULT, normalizePatternId } from '../constants/ble';
 
 const initialState: DeviceState = {
   connectionState: 'disconnected',
@@ -52,7 +52,7 @@ function parseStatus(raw: string): {
         }
         break;
       case 'pattern':
-        status.activePattern = v;
+        status.activePattern = normalizePatternId(v);
         break;
       case 'bat': {
         const parsed = parseInt(v, 10);
@@ -128,7 +128,7 @@ interface DeviceContextValue {
   setTimeSignature: (numerator: number) => void;
   setPlayingOptimistic: (playing: boolean) => void;
   setBPMOptimistic: (bpm: number) => void;
-  setPatternOptimistic: (pattern: string) => void;
+  setPatternOptimistic: (pattern: PatternId) => void;
 }
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
@@ -222,7 +222,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_BPM_OPTIMISTIC', payload: bpm });
   }, []);
 
-  const setPatternOptimistic = useCallback((pattern: string): void => {
+  const setPatternOptimistic = useCallback((pattern: PatternId): void => {
     dispatch({ type: 'SET_PATTERN_OPTIMISTIC', payload: pattern });
   }, []);
 

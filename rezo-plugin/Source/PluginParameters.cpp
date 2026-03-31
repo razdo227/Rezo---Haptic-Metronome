@@ -8,14 +8,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // User-facing vibration types mapped to tuned firmware patterns in the processor.
-    juce::StringArray patternNames { "Strong", "Gentle", "Sharp", "Buzz" };
+    // User-facing pattern labels — same names and order as the mobile app.
+    // Index → firmware mapping lives in GATTConstants.h PLUGIN_PRESET_TO_FIRMWARE[].
+    juce::StringArray patternNames { "Soft Click", "Click", "Sharp", "Pulse", "Soft Bump", "Accent", "Thud" };
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParamIDs::VIBRATION_PRESET, 1 },
         "Pattern",
         patternNames,
-        0)); // default: Strong
+        3)); // default: Pulse
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParamIDs::SIDE_MODE, 1 },

@@ -49,9 +49,9 @@ Custom PCB + wearable enclosure
 
 ## Current status
 
-- App: BLE control surface for INTERNAL / MIDI_CLOCK / MIDI_BEAT modes
-- Firmware: dual-LRA scheduler with side-routing and polyrhythm support
-- Desktop: JUCE VST3/AU plugin with helper-based BLE bridge for DAWs
+- App: BLE control surface for INTERNAL / MIDI_CLOCK / MIDI_BEAT modes; `SIDE`/`POLY` commands wired up
+- Firmware: dual-LRA scheduler; DRV2605L auto-calibrated for Vybronics VLV101040A; 16 defined waveform patterns
+- Desktop: JUCE VST3/AU plugin; 7 presets now match mobile display names; unified via `GATTConstants.h`
 - Tests: app unit tests and plugin Catch2 suite
 - PCB: v0.1 DRC cleaned to non-critical warnings + Gerbers exported
 
@@ -93,7 +93,7 @@ ctest --test-dir build/debug -C Debug --output-on-failure
 
 ## Next priorities
 
-1. Add app-side controls for side routing and polyrhythms.
-2. Tune waveform tables for the dual-LRA hardware.
-3. Hardware-in-loop tests for timing jitter and haptic response.
-4. Publish the desktop/helper workflow and host compatibility notes.
+1. Add app-side UI controls for side routing and polyrhythms (commands wired, UI pending).
+2. Hardware-in-loop tests for timing jitter and haptic response.
+3. Publish the desktop/helper workflow and host compatibility notes.
+4. Validate LRA auto-calibration results on hardware (check `A_CAL_COMP`/`A_CAL_BEMF` registers post-boot).

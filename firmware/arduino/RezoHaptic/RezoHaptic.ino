@@ -86,81 +86,107 @@ struct ScheduledEvent {
   bool isDownbeat = false;
 };
 
+struct MotorGate {
+  bool active = false;
+  uint32_t stopAtMs = 0;
+};
+
 static const WaveformSequence WAVEFORMS_NORMAL[] = {
-  // 0  CLICK          — short crisp tap
+  // 0  CLICK          — short crisp tap (Sharp Click 100%)
   {{ 1, 0 }},
-  // 1  PULSE          — medium rounded bump
-  {{ 47, 0 }},
-  // 2  SOFT_BUMP      — gentle nudge
-  {{ 14, 0 }},
-  // 3  SHARP          — fast sharp tick
-  {{ 4, 0 }},
+  // 1  PULSE          — medium tap (Strong Click 60%)
+  {{ 2, 0 }},
+  // 2  SOFT_BUMP      — gentle nudge (Soft Bump 100%)
+  {{ 10, 0 }},
+  // 3  SHARP          — fast strong tick (Sharp Click 100%)
+  {{ 1, 0 }},
   // 4  DOUBLE         — two rapid taps
   {{ 1, 1, 0 }},
   // 5  TRIPLET        — three rapid taps
   {{ 1, 1, 1, 0 }},
-  // 6  RAMP_UP        — swells in
-  {{ 74, 0 }},
-  // 7  RAMP_DOWN      — fades out
-  {{ 75, 0 }},
-  // 8  BUZZ_HOLD      — sustained buzz
+  // 6  RAMP_UP        — swells in (Transition Ramp Up Short Smooth 1)
+  {{ 71, 0 }},
+  // 7  RAMP_DOWN      — fades out (Transition Ramp Down Short Smooth 1)
+  {{ 73, 0 }},
+  // 8  BUZZ_HOLD      — sustained buzz (1000ms buzz)
   {{ 52, 0 }},
-  // 9  THUD           — deep low-frequency hit
-  {{ 58, 0 }},
-  // 10 HEARTBEAT      — ba-bum
-  {{ 14, 14, 0 }},
+  // 9  THUD           — deep low-frequency hit (Heavy Click 100%)
+  {{ 5, 0 }},
+  // 10 HEARTBEAT      — ba-bum (two medium hits)
+  {{ 2, 2, 0 }},
   // 11 LONG_BUZZ      — extended hold buzz
   {{ 84, 0 }},
-  // 12 SOFT_CLICK     — very light tap
-  {{ 7, 0 }},
-  // 13 POPS           — two pops
-  {{ 18, 18, 0 }},
-  // 14 TRANSITION_HUM — smooth ramp with hold
-  {{ 56, 47, 0 }},
-  // 15 STRONG_CLICK   — firm single hit
-  {{ 16, 0 }},
+  // 12 SOFT_CLICK     — very light tap (Soft Click 100%)
+  {{ 11, 0 }},
+  // 13 POPS           — two sharp pops
+  {{ 1, 1, 0 }},
+  // 14 TRANSITION_HUM — ramp + hold (Transition Ramp + buzz)
+  {{ 71, 52, 0 }},
+  // 15 STRONG_CLICK   — firm single hit (Heavy Click 100%)
+  {{ 5, 0 }},
 };
 constexpr uint8_t PATTERN_COUNT = sizeof(WAVEFORMS_NORMAL) / sizeof(WAVEFORMS_NORMAL[0]);
 
+// Accent = downbeat. Use the hardest single hit available (waveform 5 = Heavy Click 100%)
+// to give a clear tactile distinction from subdivisions.
 static const WaveformSequence WAVEFORMS_ACCENT[] = {
   // 0  CLICK accent
-  {{ 16, 1, 0 }},
+  {{ 5, 0 }},
   // 1  PULSE accent
-  {{ 58, 47, 0 }},
+  {{ 5, 0 }},
   // 2  SOFT_BUMP accent
-  {{ 47, 14, 0 }},
+  {{ 5, 0 }},
   // 3  SHARP accent
-  {{ 4, 0 }},
+  {{ 5, 0 }},
   // 4  DOUBLE accent
-  {{ 16, 1, 1, 0 }},
+  {{ 5, 0 }},
   // 5  TRIPLET accent
-  {{ 16, 1, 1, 1, 0 }},
+  {{ 5, 0 }},
   // 6  RAMP_UP accent
-  {{ 58, 74, 0 }},
+  {{ 5, 0 }},
   // 7  RAMP_DOWN accent
-  {{ 58, 75, 0 }},
+  {{ 5, 0 }},
   // 8  BUZZ_HOLD accent
-  {{ 52, 0 }},
+  {{ 5, 0 }},
   // 9  THUD accent
-  {{ 72, 58, 0 }},
+  {{ 5, 0 }},
   // 10 HEARTBEAT accent
-  {{ 58, 14, 14, 0 }},
+  {{ 5, 0 }},
   // 11 LONG_BUZZ accent
-  {{ 58, 84, 0 }},
+  {{ 5, 0 }},
   // 12 SOFT_CLICK accent
-  {{ 7, 0 }},
+  {{ 5, 0 }},
   // 13 POPS accent
-  {{ 16, 18, 18, 0 }},
+  {{ 5, 0 }},
   // 14 TRANSITION_HUM accent
-  {{ 58, 56, 47, 0 }},
+  {{ 5, 0 }},
   // 15 STRONG_CLICK accent
-  {{ 16, 0 }},
+  {{ 5, 0 }},
 };
 
 static const char* PATTERN_NAMES[] = {
   "CLICK", "PULSE", "SOFT_BUMP", "SHARP", "DOUBLE", "TRIPLET",
   "RAMP_UP", "RAMP_DOWN", "BUZZ_HOLD", "THUD", "HEARTBEAT",
   "LONG_BUZZ", "SOFT_CLICK", "POPS", "TRANSITION_HUM", "STRONG_CLICK"
+};
+
+static const uint8_t PATTERN_CUTOFF_MS[] = {
+  20, // CLICK          (waveform 1:  ~16 ms)
+  25, // PULSE          (waveform 2:  ~20 ms)
+  28, // SOFT_BUMP      (waveform 10: ~24 ms)
+  20, // SHARP          (waveform 1:  ~16 ms)
+  36, // DOUBLE         (two waveform 1s: ~32 ms)
+  50, // TRIPLET        (three waveform 1s: ~48 ms)
+  50, // RAMP_UP        (waveform 71: ~46 ms)
+  50, // RAMP_DOWN      (waveform 73: ~46 ms)
+  40, // BUZZ_HOLD      (waveform 52: ~36 ms)
+  22, // THUD           (waveform 5:  ~18 ms)
+  44, // HEARTBEAT      (two waveform 2s: ~40 ms)
+  50, // LONG_BUZZ      (waveform 84: ~46 ms)
+  18, // SOFT_CLICK     (waveform 11: ~14 ms)
+  36, // POPS           (two waveform 1s: ~32 ms)
+  90, // TRANSITION_HUM (waveform 71 + 52: ~86 ms)
+  22, // STRONG_CLICK   (waveform 5:  ~18 ms)
 };
 
 // -------------------------------------------------------------
@@ -190,6 +216,8 @@ RezoState g;
 // Two independent driver objects, each bound to its own I2C bus.
 Adafruit_DRV2605 drvL;  // left  — Wire  (D4/D5)
 Adafruit_DRV2605 drvR;  // right — WireR (D2/D3)
+MotorGate gateL;
+MotorGate gateR;
 
 // -------------------------------------------------------------
 // BLE GATT service
@@ -341,6 +369,7 @@ void updatePairingLed(uint32_t now) {
 // Adafruit_DRV2605::begin() accepts TwoWire* (lib v1.2.0+).
 // -------------------------------------------------------------
 static void drv_load_and_fire(Adafruit_DRV2605 &drv, const WaveformSequence &seq) {
+  drv.stop();
   // Write all 8 slots — never break early. If a previous sequence had more
   // entries, leftover non-zero slot values would otherwise replay silently.
   for (uint8_t i = 0; i < 8; i++) {
@@ -354,35 +383,70 @@ static void drv_init_chip(Adafruit_DRV2605 &drv, arduino::MbedI2C &bus) {
   drv.begin(&bus);
   drv.useLRA();
   drv.selectLibrary(6);  // Library 6: LRA library
+
+  // Configure voltage registers for Vybronics VLV101040A (1.8V rated, 2.25V max overdrive).
+  // RATED_VOLTAGE  = V_rated  × 255 / 2.4  → 1.8  × 255 / 2.4 ≈ 0x79
+  // OD_CLAMP       = V_od_max × 255 / 2.4  → 2.25 × 255 / 2.4 ≈ 0x97
+  // Adjust these if you swap motors.
+  drv.writeRegister8(0x16, 0x79);  // RATED_VOLTAGE
+  drv.writeRegister8(0x17, 0x97);  // OD_CLAMP
+
+  // Auto-calibrate: measures back-EMF to lock onto the LRA's resonant frequency.
+  // Takes ~1.2 s at startup — essential for defined, crisp vibrations.
+  drv.autoCalibrate();
+
   drv.setMode(DRV2605_MODE_INTTRIG);
 }
 
-void fireMotorPulse(Adafruit_DRV2605 &drv, uint8_t patternIndex, bool isDownbeat) {
+void serviceMotorGate(Adafruit_DRV2605 &drv, MotorGate &gate, uint32_t now) {
+  if (!gate.active) return;
+  if (static_cast<int32_t>(now - gate.stopAtMs) < 0) return;
+  drv.stop();
+  gate.active = false;
+}
+
+void serviceMotorGates(uint32_t now) {
+  serviceMotorGate(drvL, gateL, now);
+  serviceMotorGate(drvR, gateR, now);
+}
+
+void stopAllMotors() {
+  drvL.stop();
+  drvR.stop();
+  gateL.active = false;
+  gateR.active = false;
+}
+
+void fireMotorPulse(Adafruit_DRV2605 &drv, MotorGate &gate, uint8_t patternIndex, bool isDownbeat, uint32_t now) {
   if (patternIndex >= PATTERN_COUNT) patternIndex = 1;
+  // Use a single stronger hit for accents so the downbeat feels clear
+  // without introducing the long smeared feel from multi-waveform sequences.
   const WaveformSequence &seq = isDownbeat ? WAVEFORMS_ACCENT[patternIndex]
                                            : WAVEFORMS_NORMAL[patternIndex];
   drv_load_and_fire(drv, seq);
+  gate.active = true;
+  gate.stopAtMs = now + PATTERN_CUTOFF_MS[patternIndex];
 }
 
-void fireLeftPulse(bool isDownbeat) {
-  fireMotorPulse(drvL, g.pattern, isDownbeat);
+void fireLeftPulse(bool isDownbeat, uint32_t now) {
+  fireMotorPulse(drvL, gateL, g.pattern, isDownbeat, now);
 }
 
-void fireRightPulse(bool isDownbeat) {
-  fireMotorPulse(drvR, g.pattern, isDownbeat);
+void fireRightPulse(bool isDownbeat, uint32_t now) {
+  fireMotorPulse(drvR, gateR, g.pattern, isDownbeat, now);
 }
 
-void firePulse(bool isDownbeat) {
-  fireLeftPulse(isDownbeat);
-  fireRightPulse(isDownbeat);
+void firePulse(bool isDownbeat, uint32_t now) {
+  fireLeftPulse(isDownbeat, now);
+  fireRightPulse(isDownbeat, now);
 }
 
-void fireScheduledEvent(const ScheduledEvent& event) {
+void fireScheduledEvent(const ScheduledEvent& event, uint32_t now) {
   if (event.fireLeft) {
-    fireLeftPulse(event.isDownbeat);
+    fireLeftPulse(event.isDownbeat, now);
   }
   if (event.fireRight) {
-    fireRightPulse(event.isDownbeat);
+    fireRightPulse(event.isDownbeat, now);
   }
   g.beatCount = beatIndexForOffset(event.offsetMs);
   publishStatus();
@@ -407,13 +471,13 @@ void runEventScheduler(uint32_t now) {
       break;
     }
 
-    fireScheduledEvent(event);
+    fireScheduledEvent(event, now);
     ++g.nextEventIx;
   }
 }
 
 void playStartupCue() {
-  WaveformSequence cue = {{ 47, 0 }};
+  WaveformSequence cue = {{ 1, 0 }};
   drv_load_and_fire(drvL, cue);
   delay(120);
   drv_load_and_fire(drvR, cue);
@@ -523,8 +587,7 @@ void applyCommand(const String &raw) {
     g.running   = false;
     g.beatCount = 0;
     g.nextEventIx = 0;
-    drvL.stop();
-    drvR.stop();
+    stopAllMotors();
     publishStatus();
     return;
   }
@@ -565,8 +628,7 @@ void applyCommand(const String &raw) {
       g.mode = SyncMode::MidiBeat;
     }
     g.running = false;
-    drvL.stop();
-    drvR.stop();
+    stopAllMotors();
     resetScheduler(now);
     publishStatus();
     return;
@@ -606,8 +668,8 @@ void applyCommand(const String &raw) {
       const bool fireLeft = !alternate || ((g.beatCount % 2) == 0);
       const bool fireRight = !alternate || !fireLeft;
       const bool isDownbeat = (g.beatCount == 0);
-      if (fireLeft) fireLeftPulse(isDownbeat);
-      if (fireRight) fireRightPulse(isDownbeat);
+      if (fireLeft) fireLeftPulse(isDownbeat, now);
+      if (fireRight) fireRightPulse(isDownbeat, now);
       const uint8_t beatCount = g.timeSigNum == 0 ? 1 : g.timeSigNum;
       g.beatCount = (g.beatCount + 1) % beatCount;
       publishStatus();
@@ -645,19 +707,19 @@ void applyCommand(const String &raw) {
   }
 
   if (cmd == "TEST:LEFT") {
-    fireLeftPulse(true);
+    fireLeftPulse(true, now);
     statusChar.writeValue("TEST:LEFT");
     return;
   }
 
   if (cmd == "TEST:RIGHT") {
-    fireRightPulse(true);
+    fireRightPulse(true, now);
     statusChar.writeValue("TEST:RIGHT");
     return;
   }
 
   if (cmd == "TEST:BOTH") {
-    firePulse(true);
+    firePulse(true, now);
     statusChar.writeValue("TEST:BOTH");
     return;
   }
@@ -710,8 +772,7 @@ void loop() {
     if (g.running || g.mode != SyncMode::Internal) {
       g.running = false;
       g.mode = SyncMode::Internal;
-      drvL.stop();
-      drvR.stop();
+      stopAllMotors();
       resetScheduler(now);
     }
     updatePairingLed(now);
@@ -727,6 +788,9 @@ void loop() {
 
   // -- Battery (non-blocking, every 30 s) --
   updateBattery(now);
+
+  // -- Keep haptics short even when the selected ROM effect wants to ring longer --
+  serviceMotorGates(now);
 
   // -- Transport scheduler --
   runEventScheduler(now);
