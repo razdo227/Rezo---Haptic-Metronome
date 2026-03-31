@@ -12,58 +12,27 @@ import {
 import Constants from 'expo-constants';
 import { theme } from '../theme';
 import { useDevice } from '../context/DeviceContext';
-import { COMMANDS, SYNC_MODES, TIME_SIGNATURES } from '../constants/ble';
+import { COMMANDS, PATTERNS, SYNC_MODES, TIME_SIGNATURES } from '../constants/ble';
 import { SyncMode } from '../types';
-import BeatVisualizer from '../components/BeatVisualizer';
-import BPMControl from '../components/BPMControl';
-import PatternPicker from '../components/PatternPicker';
-import TransportButton from '../components/TransportButton';
 
 const TAP_MAX_WINDOW = 8;
 const TAP_MIN_INTERVAL_MS = 200; // ~300 BPM
 const TAP_MAX_INTERVAL_MS = 3000; // ~20 BPM
 const TAP_RESET_TIMEOUT_MS = 3000;
 
-// ── Battery indicator ─────────────────────────────────────────────────────────
-
 function BatteryIndicator({ percent }: { percent: number | null }) {
   const isEmpty = percent === null;
   const isLow = percent !== null && percent < 15;
-  const color = isLow ? theme.colors.error : theme.colors.textDim;
+  const color = isLow ? theme.colors.error : theme.colors.text;
   const label = isEmpty ? '—' : `${percent}%`;
 
-  // Build a simple text-based battery icon using filled/empty blocks
-  const barCount = 4;
-  const filledBars = isEmpty ? 0 : Math.round((percent! / 100) * barCount);
-  const bars = Array.from({ length: barCount }, (_, i) =>
-    i < filledBars ? '▮' : '▯'
-  ).join('');
-
   return (
-    <View style={batteryStyles.row}>
-      <Text style={[batteryStyles.bars, { color }]}>{bars}</Text>
-      <Text style={[batteryStyles.label, { color }]}>{label}</Text>
+    <View style={styles.batteryRow}>
+      <Text style={[styles.batteryIcon, { color }]}>▮</Text>
+      <Text style={[styles.batteryLabel, { color }]}>{label}</Text>
     </View>
   );
 }
-
-const batteryStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  bars: {
-    fontSize: 11,
-    letterSpacing: 0,
-  },
-  label: {
-    fontSize: theme.fontSize.caption,
-    letterSpacing: 0.5,
-  },
-});
-
-// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function MainScreen() {
   const {
@@ -73,18 +42,17 @@ export default function MainScreen() {
     setTimeSignature,
     setPatternOptimistic,
   } = useDevice();
+
   const {
     connectionState,
     isPlaying,
     bpm,
     syncMode,
     activePattern,
-    currentBeat,
     timeSignatureNumerator,
     batteryPercent,
   } = state;
 
-  // Tap tempo state
   const tapTimestampsRef = useRef<number[]>([]);
   const tapResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [tapBPM, setTapBPM] = useState<number | null>(null);
@@ -103,7 +71,6 @@ export default function MainScreen() {
     [sendCommand]
   );
 
-  // Transport
   const handleTransport = useCallback(() => {
     if (isPlaying) {
       safelySend(COMMANDS.STOP);
@@ -112,7 +79,6 @@ export default function MainScreen() {
     }
   }, [isPlaying, safelySend]);
 
-  // BPM change
   const handleBPMChange = useCallback(
     (newBPM: number) => {
       safelySend(COMMANDS.BPM(newBPM));
@@ -120,7 +86,6 @@ export default function MainScreen() {
     [safelySend]
   );
 
-  // Pattern — send command AND update optimistic state
   const handlePatternSelect = useCallback(
     (patternId: string) => {
       setPatternOptimistic(patternId);
@@ -129,7 +94,6 @@ export default function MainScreen() {
     [safelySend, setPatternOptimistic]
   );
 
-  // Mode
   const handleModeSelect = useCallback(
     (mode: string) => {
       safelySend(COMMANDS.MODE(mode));
@@ -137,7 +101,6 @@ export default function MainScreen() {
     [safelySend]
   );
 
-  // Time signature (local only — firmware doesn't track time sig)
   const handleTimeSig = useCallback(
     (numerator: number) => {
       setTimeSignature(numerator);
@@ -145,26 +108,19 @@ export default function MainScreen() {
     [setTimeSignature]
   );
 
-  const effectiveTimeSig = timeSignatureNumerator;
-
-  // Tap tempo
   const handleTapTempo = useCallback(() => {
     const now = Date.now();
 
-    // Clear reset timeout
     if (tapResetTimeoutRef.current) {
       clearTimeout(tapResetTimeoutRef.current);
     }
 
     const taps = tapTimestampsRef.current;
-
-    // If last tap was too long ago, start fresh
     if (taps.length > 0 && now - taps[taps.length - 1] > TAP_RESET_TIMEOUT_MS) {
       tapTimestampsRef.current = [];
     }
 
     tapTimestampsRef.current = [...tapTimestampsRef.current, now].slice(-TAP_MAX_WINDOW);
-
     const updatedTaps = tapTimestampsRef.current;
 
     if (updatedTaps.length >= 2) {
@@ -184,19 +140,12 @@ export default function MainScreen() {
       }
     }
 
-    // Set reset timeout
     tapResetTimeoutRef.current = setTimeout(() => {
       tapTimestampsRef.current = [];
       setTapBPM(null);
     }, TAP_RESET_TIMEOUT_MS);
   }, [safelySend]);
 
-  // Manual BEAT trigger (MIDI_BEAT mode)
-  const handleManualBeat = useCallback(() => {
-    safelySend(COMMANDS.BEAT);
-  }, [safelySend]);
-
-  // Disconnect
   const handleDisconnect = useCallback(() => {
     Alert.alert(
       'Disconnect',
@@ -212,27 +161,25 @@ export default function MainScreen() {
     );
   }, [disconnect]);
 
+  const adjustBpm = (delta: number) => {
+    const next = Math.max(20, Math.min(300, bpm + delta));
+    handleBPMChange(next);
+  };
+
+  const activePatternName = PATTERNS.find((p) => p.id === activePattern)?.displayName ?? 'Standard';
+
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Top bar */}
       <View style={styles.topBar}>
-        <Text style={styles.topBarTitle}>REZO</Text>
+        <View style={styles.logoRow}>
+          <View style={styles.logoBadge}>
+            <Text style={styles.logoGlyph}>◢</Text>
+          </View>
+          <Text style={styles.brand}>rezo</Text>
+        </View>
         <View style={styles.topBarRight}>
           <BatteryIndicator percent={batteryPercent} />
-          <View
-            style={[
-              styles.connectionDot,
-              { backgroundColor: isConnected ? theme.colors.success : theme.colors.error },
-            ]}
-          />
-          <Text style={styles.topBarDevice}>RezoHaptic</Text>
-          <TouchableOpacity
-            style={styles.disconnectBtn}
-            onPress={handleDisconnect}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.disconnectIcon}>⏏</Text>
-          </TouchableOpacity>
+          <Text style={styles.bluetooth}>ᛒ</Text>
         </View>
       </View>
 
@@ -240,115 +187,111 @@ export default function MainScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        bounces={false}
       >
-        {/* BPM Control */}
-        <View style={styles.section}>
-          <BPMControl bpm={bpm} onBPMChange={handleBPMChange} />
+        <View style={styles.dialWrap}>
+          <View style={styles.dialTrack}>
+            <View style={styles.dialProgress} />
+          </View>
+          <View style={styles.dial}>
+            <Text style={styles.bpmValue}>{bpm}</Text>
+            <Text style={styles.bpmLabel}>BPM</Text>
+          </View>
         </View>
 
-        {/* Tap Tempo */}
-        <View style={styles.tapSection}>
-          <TouchableOpacity
-            style={styles.tapButton}
-            onPress={handleTapTempo}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.tapButtonText}>TAP TEMPO</Text>
-            {tapBPM !== null && (
-              <Text style={styles.tapBPMPreview}>{tapBPM} BPM</Text>
-            )}
+        <View style={styles.bpmButtons}>
+          <TouchableOpacity style={styles.circleButton} onPress={() => adjustBpm(-1)}>
+            <Text style={styles.circleButtonText}>−</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.circleButton} onPress={() => adjustBpm(1)}>
+            <Text style={styles.circleButtonText}>+</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Beat visualizer + Time sig */}
-        <View style={styles.section}>
-          <BeatVisualizer
-            totalBeats={effectiveTimeSig}
-            currentBeat={currentBeat}
-            isPlaying={isPlaying}
-          />
-          <View style={styles.timeSigRow}>
-            {TIME_SIGNATURES.map((ts) => (
-              <TouchableOpacity
-                key={ts.label}
-                style={[
-                  styles.timeSigChip,
-                  effectiveTimeSig === ts.numerator && styles.timeSigChipActive,
-                ]}
-                onPress={() => handleTimeSig(ts.numerator)}
-                activeOpacity={0.75}
-              >
-                <Text
+        <View style={styles.cardRow}>
+          <View style={styles.infoCard}>
+            <Text style={styles.cardLabel}>SIGNATURE</Text>
+            <Text style={styles.cardValue}>{timeSignatureNumerator}/4</Text>
+            <View style={styles.chipRow}>
+              {TIME_SIGNATURES.map((ts) => (
+                <TouchableOpacity
+                  key={ts.label}
                   style={[
-                    styles.timeSigLabel,
-                    effectiveTimeSig === ts.numerator && styles.timeSigLabelActive,
+                    styles.signatureChip,
+                    timeSignatureNumerator === ts.numerator && styles.signatureChipActive,
                   ]}
+                  onPress={() => handleTimeSig(ts.numerator)}
                 >
-                  {ts.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text style={styles.signatureChipText}>{ts.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.infoCard}>
+            <Text style={styles.cardLabel}>SUBDIVISION</Text>
+            <Text style={styles.cardValue}>{activePatternName || 'Quarter'}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.chipRow}>
+                {PATTERNS.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.signatureChip, activePattern === p.id && styles.signatureChipActive]}
+                    onPress={() => handlePatternSelect(p.id)}
+                  >
+                    <Text style={styles.signatureChipText}>{p.displayName}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
           </View>
         </View>
 
-        {/* Transport button */}
-        <View style={styles.transportSection}>
-          <TransportButton
-            isPlaying={isPlaying}
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.cardLabel}>HAPTIC INTENSITY</Text>
+            <Text style={styles.strongLabel}>{isPlaying ? 'LIVE' : 'READY'}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.startButton, isPlaying && styles.stopButton]}
             onPress={handleTransport}
             disabled={!isConnected}
-          />
+          >
+            <Text style={styles.startText}>{isPlaying ? '■ STOP PULSE' : '▶ START PULSE'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* MIDI BEAT manual trigger */}
-        {syncMode === 'MIDI_BEAT' && (
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={styles.beatTriggerButton}
-              onPress={handleManualBeat}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.beatTriggerText}>BEAT</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Pattern Picker */}
-        <View style={styles.sectionNoH}>
-          <PatternPicker
-            activePattern={activePattern}
-            onPatternSelect={handlePatternSelect}
-          />
-        </View>
-
-        {/* Mode selector */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SYNC MODE</Text>
+        <View style={styles.modeWrap}>
+          <Text style={styles.cardLabel}>SYNC MODE</Text>
           <View style={styles.modeRow}>
             {SYNC_MODES.map((m) => (
               <TouchableOpacity
                 key={m.id}
-                style={[
-                  styles.modeChip,
-                  syncMode === m.id && styles.modeChipActive,
-                ]}
+                style={[styles.modeChip, syncMode === m.id && styles.modeChipActive]}
                 onPress={() => handleModeSelect(m.id)}
-                activeOpacity={0.75}
               >
-                <Text
-                  style={[
-                    styles.modeLabel,
-                    syncMode === (m.id as SyncMode) && styles.modeLabelActive,
-                  ]}
-                >
+                <Text style={[styles.modeText, syncMode === (m.id as SyncMode) && styles.modeTextActive]}>
                   {m.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
+
+        <TouchableOpacity style={styles.tapButton} onPress={handleTapTempo}>
+          <Text style={styles.tapText}>Tap Tempo {tapBPM ? `• ${tapBPM} BPM` : ''}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={handleDisconnect} style={styles.disconnectBtn}>
+          <Text style={styles.disconnectText}>Disconnect Device</Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      <View style={styles.bottomTabBar}>
+        <Text style={[styles.tabItem, styles.tabItemActive]}>Tempo</Text>
+        <Text style={styles.tabItem}>Presets</Text>
+        <Text style={styles.tabItem}>Devices</Text>
+        <Text style={styles.tabItem}>Settings</Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -359,166 +302,288 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     paddingTop: Platform.OS === 'android' ? Constants.statusBarHeight : 0,
   },
-  scroll: {
-    flex: 1,
-  },
+  scroll: { flex: 1 },
   scrollContent: {
-    paddingTop: 24,
-    paddingBottom: 40,
+    paddingHorizontal: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
   },
   topBar: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
+    paddingVertical: theme.spacing.sm + 2,
     borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
   },
-  topBarTitle: {
-    fontSize: theme.fontSize.h2,
-    fontWeight: '200',
-    color: theme.colors.text,
-    letterSpacing: 6,
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  logoBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    backgroundColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoGlyph: {
+    color: '#031423',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  brand: {
+    color: theme.colors.accent,
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   topBarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs + 2,
+    gap: theme.spacing.sm,
   },
-  connectionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  batteryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  topBarDevice: {
-    fontSize: theme.fontSize.caption,
+  batteryIcon: { fontSize: 13 },
+  batteryLabel: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  bluetooth: {
     color: theme.colors.textDim,
-    letterSpacing: 1,
+    fontSize: 28,
   },
   disconnectBtn: {
-    marginLeft: theme.spacing.xs,
-    padding: theme.spacing.xs,
-  },
-  disconnectIcon: {
-    fontSize: 18,
-    color: theme.colors.textDim,
-  },
-  section: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    alignItems: 'center',
-  },
-  sectionNoH: {
-    paddingVertical: theme.spacing.sm,
-  },
-  sectionLabel: {
-    fontSize: theme.fontSize.caption,
-    color: theme.colors.textDim,
-    letterSpacing: 2,
-    marginBottom: theme.spacing.sm,
-    alignSelf: 'flex-start',
-  },
-  tapSection: {
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-    alignItems: 'center',
-  },
-  tapButton: {
-    backgroundColor: theme.colors.surfaceAlt,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.sm,
-    paddingVertical: theme.spacing.sm + 2,
-    paddingHorizontal: theme.spacing.xl,
-    alignItems: 'center',
-    minWidth: 180,
+    borderRadius: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
-  tapButtonText: {
-    fontSize: theme.fontSize.body,
+  disconnectText: {
     color: theme.colors.textDim,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dialWrap: {
+    alignItems: 'center',
+    marginTop: theme.spacing.lg,
+    justifyContent: 'center',
+  },
+  dialTrack: {
+    position: 'absolute',
+    width: 308,
+    height: 308,
+    borderRadius: 154,
+    borderWidth: 6,
+    borderColor: '#252A33',
+  },
+  dialProgress: {
+    position: 'absolute',
+    width: 308,
+    height: 308,
+    borderRadius: 154,
+    borderWidth: 6,
+    borderColor: theme.colors.accent,
+    borderBottomColor: 'transparent',
+    borderLeftColor: theme.colors.accent,
+    transform: [{ rotate: '-30deg' }],
+  },
+  dial: {
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#050A12',
+  },
+  bpmValue: {
+    color: theme.colors.text,
+    fontSize: 76,
+    fontWeight: '800',
+    letterSpacing: -2,
+    lineHeight: 80,
+  },
+  bpmLabel: {
+    color: theme.colors.textDim,
+    fontSize: 14,
     letterSpacing: 2,
+    marginTop: 2,
     fontWeight: '600',
   },
-  tapBPMPreview: {
-    fontSize: theme.fontSize.caption,
-    color: theme.colors.accent,
-    marginTop: theme.spacing.xs,
+  bpmButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.spacing.xl,
+    marginTop: theme.spacing.lg,
+  },
+  circleButton: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleButtonText: {
+    color: theme.colors.text,
+    fontSize: 54,
+    fontWeight: '300',
+    marginTop: -4,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    marginTop: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
+  infoCard: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.sm + 4,
+    minHeight: 146,
+  },
+  cardLabel: {
+    color: theme.colors.textDim,
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: 1,
   },
-  timeSigRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
+  cardValue: {
+    color: theme.colors.text,
+    fontSize: 22,
+    fontWeight: '800',
+    marginTop: 8,
+    marginBottom: 8,
   },
-  timeSigChip: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs + 2,
-    borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.surfaceAlt,
+  chipRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  signatureChip: {
     borderWidth: 1,
     borderColor: theme.colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surfaceAlt,
   },
-  timeSigChipActive: {
-    backgroundColor: theme.colors.accent + '22',
+  signatureChipActive: {
     borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accent + '22',
   },
-  timeSigLabel: {
-    fontSize: theme.fontSize.caption,
-    color: theme.colors.textDim,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  timeSigLabelActive: {
-    color: theme.colors.accent,
-  },
-  transportSection: {
-    paddingVertical: theme.spacing.md,
-    alignItems: 'center',
-  },
-  beatTriggerButton: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: 2,
-    borderColor: theme.colors.accentDown,
-    borderRadius: theme.borderRadius.sm,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xxl,
-    alignItems: 'center',
-  },
-  beatTriggerText: {
-    fontSize: theme.fontSize.h2,
+  signatureChipText: {
+    color: theme.colors.text,
+    fontSize: 11,
     fontWeight: '700',
-    color: theme.colors.accentDown,
-    letterSpacing: 4,
+  },
+  panel: {
+    marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.sm,
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    marginBottom: theme.spacing.sm,
+  },
+  strongLabel: {
+    color: theme.colors.accent,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  startButton: {
+    backgroundColor: theme.colors.accent,
+    borderRadius: 20,
+    minHeight: 82,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopButton: {
+    backgroundColor: theme.colors.accentDown,
+  },
+  startText: {
+    color: '#04101D',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  modeWrap: {
+    marginTop: theme.spacing.md,
   },
   modeRow: {
     flexDirection: 'row',
-    gap: theme.spacing.sm,
     flexWrap: 'wrap',
-    justifyContent: 'center',
+    marginTop: theme.spacing.sm,
+    gap: 8,
   },
   modeChip: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs + 2,
-    borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.surfaceAlt,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   modeChipActive: {
-    backgroundColor: theme.colors.accent + '22',
     borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accent + '1F',
   },
-  modeLabel: {
-    fontSize: theme.fontSize.caption,
+  modeText: {
     color: theme.colors.textDim,
-    fontWeight: '600',
-    letterSpacing: 1,
+    fontSize: 12,
+    fontWeight: '700',
   },
-  modeLabelActive: {
+  modeTextActive: {
+    color: theme.colors.accent,
+  },
+  tapButton: {
+    marginTop: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  tapText: {
+    color: theme.colors.textDim,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  bottomTabBar: {
+    minHeight: 76,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: '#04060B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingBottom: 8,
+  },
+  tabItem: {
+    color: theme.colors.textDim,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tabItemActive: {
     color: theme.colors.accent,
   },
 });
