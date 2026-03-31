@@ -52,8 +52,8 @@ constexpr uint32_t PAIR_ON2_END   =  290;
 // -------------------------------------------------------------
 // Second I2C bus for right motor
 // WireR is bound to D2 (SDA=P0.28) and D3 (SCL=P0.29).
-// Declared as a new MbedI2C object — Wire1 is reserved by the BSP.
-// On ArduinoCore-mbed, TwoWire is a typedef for arduino::MbedI2C.
+// Declared as a new MbedI2C object — Wire1 is not exposed on ArduinoCore-mbed.
+// TwoWire is a typedef for arduino::MbedI2C on the Seeeduino:mbed BSP.
 // -------------------------------------------------------------
 arduino::MbedI2C WireR(D2, D3);
 
@@ -392,8 +392,11 @@ static void drv_init_chip(Adafruit_DRV2605 &drv, arduino::MbedI2C &bus) {
   drv.writeRegister8(0x17, 0x97);  // OD_CLAMP
 
   // Auto-calibrate: measures back-EMF to lock onto the LRA's resonant frequency.
-  // Takes ~1.2 s at startup — essential for defined, crisp vibrations.
-  drv.autoCalibrate();
+  // lib v1.2.4 has no autoCalibrate() method — trigger the mode manually.
+  // Takes ~1.2 s per datasheet; using 1.3 s for margin.
+  drv.setMode(DRV2605_MODE_AUTOCAL);
+  drv.go();
+  delay(1300);
 
   drv.setMode(DRV2605_MODE_INTTRIG);
 }
@@ -735,7 +738,7 @@ void setup() {
 
   // I2C bus init: begin() is called inside drv_init_chip for each bus.
   // Wire  (TWI0): Left motor  — SDA=D4, SCL=D5  (BSP default pins)
-  // Wire1 (TWI1): Right motor — remap to SDA=D2, SCL=D3 via setPins()
+  // WireR (TWI1): Right motor — SDA=D2, SCL=D3  (custom MbedI2C instance)
   drv_init_chip(drvL, Wire);
   drv_init_chip(drvR, WireR);
   playStartupCue();
